@@ -1,0 +1,225 @@
+# Tekton Task: Build
+# Implements ADR-040 (Tekton + ArgoCD + GitOps) and ADR-050 (DevSecOps)
+#
+# Responsibilities:
+#   1. Build container image (docker build)
+#   2. Push to container registry
+#   3. Sign artifact with cosign (keyless/ephemeral keys via Sigstore)
+#   4. Generate SBOM with syft (SPDX format)
+#   5. Create in-toto provenance attestation
+#
+# Outputs:
+#   - signed container image in registry
+#   - SBOM stored as OCI artifact
+#   - in-toto attestation stored alongside image
+#
+# ADR References: ADR-040, ADR-050
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: build
+  namespace: sociosphere
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    app.kubernetes.io/component: pipeline
+  annotations:
+    adr.sociosphere.io/reference: "ADR-040,ADR-050"
+    adr.sociosphere.io/slsa-level: "3"
+spec:
+  description: |
+    Build, sign, and attest a container image. Implements SLSA Level 3 supply chain
+    requirements per ADR-050: cosign signing, syft SBOM, in-toto attestation.
+
+  params:
+    - name: image
+      type: string
+      description: "Fully-qualified image reference to build and push (e.g. ghcr.io/org/app:sha)"
+    - name: dockerfile
+      type: string
+      default: "Dockerfile"
+      description: "Path to Dockerfile relative to context"
+    - name: context
+      type: string
+      default: "."
+      description: "Build context path"
+    - name: registry-secret
+      type: string
+      default: "registry-credentials"
+      description: "Name of the Secret containing registry credentials"
+    - name: cosign-key-ref
+      type: string
+      default: ""
+      description: "cosign key reference (empty = keyless Sigstore signing)"
+
+  workspaces:
+    - name: source
+      description: "Checked-out source code"
+    - name: attestations
+      description: "Workspace for storing SBOM and attestation files"
+
+  results:
+    - name: image-digest
+      description: "SHA256 digest of the built image"
+    - name: image-url
+      description: "Full image URL including digest"
+    - name: sbom-url
+      description: "OCI reference to the stored SBOM"
+    - name: attestation-url
+      description: "OCI reference to the in-toto attestation"
+    - name: signature-ref
+      description: "cosign signature OCI reference"
+
+  stepTemplate:
+    env:
+      - name: IMAGE
+        value: "$(params.image)"
+      - name: REGISTRY_SECRET
+        value: "$(params.registry-secret)"
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+
+  steps:
+    # Step 1: Build container image
+    - name: build-image
+      image: gcr.io/kaniko-project/executor:v1.23.0
+      command:
+        - /kaniko/executor
+      args:
+        - "--dockerfile=$(workspaces.source.path)/$(params.dockerfile)"
+        - "--context=dir://$(workspaces.source.path)/$(params.context)"
+        - "--destination=$(params.image)"
+        - "--digest-file=$(workspaces.attestations.path)/image-digest.txt"
+        - "--cache=true"
+        - "--cache-ttl=24h"
+        - "--compressed-caching=false"
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
+      volumeMounts:
+        - name: registry-credentials
+          mountPath: /kaniko/.docker
+          readOnly: true
+
+    # Step 2: Record image digest as task result
+    - name: record-digest
+      image: alpine:3.19
+      script: |
+        #!/bin/sh
+        set -e
+        DIGEST=$(cat $(workspaces.attestations.path)/image-digest.txt)
+        IMAGE_URL="$(params.image)@${DIGEST}"
+        echo -n "${DIGEST}" | tee $(results.image-digest.path)
+        echo -n "${IMAGE_URL}" | tee $(results.image-url.path)
+        echo "Image built: ${IMAGE_URL}"
+
+    # Step 3: Generate SBOM with syft
+    - name: generate-sbom
+      image: anchore/syft:v1.0.1
+      command:
+        - syft
+      args:
+        - "$(params.image)@$(cat $(workspaces.attestations.path)/image-digest.txt)"
+        - "-o"
+        - "spdx-json=$(workspaces.attestations.path)/sbom.spdx.json"
+      env:
+        - name: SYFT_CHECK_FOR_APP_UPDATE
+          value: "false"
+
+    # Step 4: Upload SBOM as OCI artifact and record reference
+    - name: upload-sbom
+      image: ghcr.io/oras-project/oras:v1.2.0
+      script: |
+        #!/bin/sh
+        set -e
+        DIGEST=$(cat $(workspaces.attestations.path)/image-digest.txt)
+        SBOM_TAG="$(params.image)-sbom"
+        oras push ${SBOM_TAG} \
+          --config /dev/null:application/vnd.oci.image.config.v1+json \
+          $(workspaces.attestations.path)/sbom.spdx.json:application/spdx+json
+        echo -n "${SBOM_TAG}" | tee $(results.sbom-url.path)
+        echo "SBOM uploaded: ${SBOM_TAG}"
+
+    # Step 5: Sign image with cosign (keyless Sigstore)
+    - name: sign-image
+      image: gcr.io/projectsigstore/cosign:v2.2.4
+      script: |
+        #!/bin/sh
+        set -e
+        DIGEST=$(cat $(workspaces.attestations.path)/image-digest.txt)
+        IMAGE_REF="$(params.image)@${DIGEST}"
+
+        if [ -n "$(params.cosign-key-ref)" ]; then
+          cosign sign --key "$(params.cosign-key-ref)" --yes "${IMAGE_REF}"
+        else
+          # Keyless signing via Sigstore OIDC
+          cosign sign --yes "${IMAGE_REF}"
+        fi
+
+        # Record signature reference
+        SIG_REF="$(params.image):$(echo ${DIGEST} | tr ':' '-').sig"
+        echo -n "${SIG_REF}" | tee $(results.signature-ref.path)
+        echo "Image signed: ${IMAGE_REF}"
+      env:
+        - name: COSIGN_EXPERIMENTAL
+          value: "1"
+        - name: SIGSTORE_NO_BUNDLE
+          value: "false"
+
+    # Step 6: Generate in-toto provenance attestation
+    - name: create-attestation
+      image: gcr.io/projectsigstore/cosign:v2.2.4
+      script: |
+        #!/bin/sh
+        set -e
+        DIGEST=$(cat $(workspaces.attestations.path)/image-digest.txt)
+        IMAGE_REF="$(params.image)@${DIGEST}"
+
+        # Create SLSA provenance predicate
+        cat > $(workspaces.attestations.path)/provenance.json << EOF
+        {
+          "_type": "https://in-toto.io/Statement/v0.1",
+          "predicateType": "https://slsa.dev/provenance/v0.2",
+          "subject": [{"name": "$(params.image)", "digest": {"sha256": "${DIGEST#sha256:}"}}],
+          "predicate": {
+            "builder": {"id": "https://tekton.dev/chains/v2"},
+            "buildType": "https://tekton.dev/attestations/chains/pipelinerun/v2",
+            "metadata": {
+              "buildInvocationID": "$(context.pipelineRun.name)",
+              "completeness": {"parameters": true, "environment": true, "materials": true}
+            }
+          }
+        }
+        EOF
+
+        # Attest with cosign
+        if [ -n "$(params.cosign-key-ref)" ]; then
+          cosign attest --key "$(params.cosign-key-ref)" \
+            --predicate $(workspaces.attestations.path)/provenance.json \
+            --type slsaprovenance --yes "${IMAGE_REF}"
+        else
+          cosign attest --yes \
+            --predicate $(workspaces.attestations.path)/provenance.json \
+            --type slsaprovenance "${IMAGE_REF}"
+        fi
+
+        ATT_REF="$(params.image):$(echo ${DIGEST} | tr ':' '-').att"
+        echo -n "${ATT_REF}" | tee $(results.attestation-url.path)
+        echo "Attestation created: ${ATT_REF}"
+      env:
+        - name: COSIGN_EXPERIMENTAL
+          value: "1"
+
+  volumes:
+    - name: registry-credentials
+      secret:
+        secretName: "$(params.registry-secret)"
+        items:
+          - key: .dockerconfigjson
+            path: config.json

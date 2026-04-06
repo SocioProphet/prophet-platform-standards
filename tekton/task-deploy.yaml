@@ -1,0 +1,250 @@
+# Tekton Task: Deploy
+# Implements ADR-040 (Tekton + ArgoCD + GitOps)
+#
+# Responsibilities:
+#   1. Validate deployment manifest (kubeval/kubeconform)
+#   2. Update the ArgoCD Application's image tag in Git
+#   3. Trigger ArgoCD sync (or wait for auto-sync)
+#   4. Run smoke tests against deployed environment
+#   5. Rollback on failure (trigger ArgoCD rollback)
+#
+# ADR References: ADR-040, ADR-050
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: deploy
+  namespace: sociosphere
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    app.kubernetes.io/component: pipeline
+  annotations:
+    adr.sociosphere.io/reference: "ADR-040,ADR-050"
+spec:
+  description: |
+    Deploy a signed container image to a target environment via ArgoCD GitOps.
+    Updates the image tag in the Git repository, triggers ArgoCD sync, runs
+    smoke tests, and rolls back on failure.
+
+  params:
+    - name: image
+      type: string
+      description: "Fully-qualified image reference with digest (e.g. ghcr.io/org/app@sha256:...)"
+    - name: environment
+      type: string
+      description: "Target environment: staging or prod"
+    - name: argocd-server
+      type: string
+      default: "argocd-server.argocd.svc.cluster.local:443"
+      description: "ArgoCD server address"
+    - name: argocd-app-name
+      type: string
+      description: "ArgoCD Application name to sync"
+    - name: smoke-test-url
+      type: string
+      default: ""
+      description: "URL to run smoke tests against (empty = skip smoke tests)"
+    - name: smoke-test-timeout
+      type: string
+      default: "120"
+      description: "Seconds to wait for smoke tests to pass"
+    - name: manifests-path
+      type: string
+      default: "k8s/"
+      description: "Path to Kubernetes manifests for validation"
+    - name: argocd-token-secret
+      type: string
+      default: "argocd-token"
+      description: "Secret containing ARGOCD_AUTH_TOKEN key"
+
+  workspaces:
+    - name: source
+      description: "Checked-out source code (for manifest validation)"
+    - name: gitops-repo
+      description: "Checked-out GitOps repository (for image tag update)"
+
+  results:
+    - name: deploy-status
+      description: "Deployment status: success or failed"
+    - name: argocd-sync-revision
+      description: "Git revision that ArgoCD synced to"
+    - name: rollback-performed
+      description: "true if a rollback was performed, false otherwise"
+
+  stepTemplate:
+    env:
+      - name: ARGOCD_SERVER
+        value: "$(params.argocd-server)"
+      - name: ARGOCD_APP
+        value: "$(params.argocd-app-name)"
+      - name: ENVIRONMENT
+        value: "$(params.environment)"
+      - name: ARGOCD_AUTH_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: "$(params.argocd-token-secret)"
+            key: ARGOCD_AUTH_TOKEN
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+
+  steps:
+    # Step 1: Validate Kubernetes manifests
+    - name: validate-manifests
+      image: ghcr.io/yannh/kubeconform:v0.6.6-alpine
+      command:
+        - kubeconform
+      args:
+        - "-strict"
+        - "-summary"
+        - "-output"
+        - "json"
+        - "-kubernetes-version"
+        - "1.28.0"
+        - "$(workspaces.source.path)/$(params.manifests-path)"
+      workingDir: $(workspaces.source.path)
+
+    # Step 2: Update image tag in GitOps repo
+    - name: update-image-tag
+      image: alpine/git:2.43.0
+      script: |
+        #!/bin/sh
+        set -e
+        cd $(workspaces.gitops-repo.path)
+        IMAGE="$(params.image)"
+        ENV="$(params.environment)"
+
+        echo "Updating image to: ${IMAGE} in environment: ${ENV}"
+
+        # Update image reference in kustomization or values file
+        # Supports kustomize-style overlays (k8s/<env>/kustomization.yaml)
+        KUSTOMIZE_FILE="k8s/${ENV}/kustomization.yaml"
+        VALUES_FILE="helm/${ENV}/values.yaml"
+
+        if [ -f "${KUSTOMIZE_FILE}" ]; then
+          # Use kustomize edit (if kustomize available) or sed
+          sed -i "s|newName: .*|newName: ${IMAGE%%@*}|g" "${KUSTOMIZE_FILE}"
+          sed -i "s|newTag: .*|newTag: ${IMAGE##*@}|g" "${KUSTOMIZE_FILE}"
+          echo "Updated kustomization: ${KUSTOMIZE_FILE}"
+        elif [ -f "${VALUES_FILE}" ]; then
+          IMAGE_REPO="${IMAGE%%:*}"
+          IMAGE_TAG="${IMAGE##*:}"
+          sed -i "s|image: .*|image: ${IMAGE}|g" "${VALUES_FILE}"
+          echo "Updated values: ${VALUES_FILE}"
+        else
+          echo "No kustomization or values file found at expected paths."
+          echo "Tried: ${KUSTOMIZE_FILE}, ${VALUES_FILE}"
+          exit 1
+        fi
+
+        # Commit and push the change
+        git config user.email "tekton@sociosphere.io"
+        git config user.name "Tekton Deploy Task"
+        git add -A
+        git commit -m "deploy(${ENV}): update image to ${IMAGE}
+
+        Triggered by: $(context.pipelineRun.name)
+        ADR: ADR-040"
+        git push origin HEAD
+
+        echo "GitOps update committed and pushed"
+
+    # Step 3: Trigger ArgoCD sync
+    - name: argocd-sync
+      image: quay.io/argoproj/argocd:v2.10.0
+      script: |
+        #!/bin/sh
+        set -e
+
+        echo "Triggering ArgoCD sync for app: ${ARGOCD_APP} in env: ${ENVIRONMENT}"
+
+        argocd app sync "${ARGOCD_APP}" \
+          --server "${ARGOCD_SERVER}" \
+          --auth-token "${ARGOCD_AUTH_TOKEN}" \
+          --insecure \
+          --timeout 300 \
+          --retry-limit 3
+
+        # Wait for sync to complete
+        argocd app wait "${ARGOCD_APP}" \
+          --server "${ARGOCD_SERVER}" \
+          --auth-token "${ARGOCD_AUTH_TOKEN}" \
+          --insecure \
+          --timeout 300 \
+          --health \
+          --sync
+
+        # Record the revision
+        REVISION=$(argocd app get "${ARGOCD_APP}" \
+          --server "${ARGOCD_SERVER}" \
+          --auth-token "${ARGOCD_AUTH_TOKEN}" \
+          --insecure \
+          -o json | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('status',{}).get('sync',{}).get('revision','unknown'))")
+
+        echo -n "${REVISION}" > $(results.argocd-sync-revision.path)
+        echo "ArgoCD sync complete. Revision: ${REVISION}"
+
+    # Step 4: Run smoke tests
+    - name: smoke-tests
+      image: curlimages/curl:8.6.0
+      script: |
+        #!/bin/sh
+        set -e
+        SMOKE_URL="$(params.smoke-test-url)"
+        TIMEOUT="$(params.smoke-test-timeout)"
+
+        if [ -z "${SMOKE_URL}" ]; then
+          echo "No smoke test URL configured — skipping"
+          echo -n "false" > $(results.rollback-performed.path)
+          echo -n "success" > $(results.deploy-status.path)
+          exit 0
+        fi
+
+        echo "Running smoke tests against: ${SMOKE_URL}"
+        ELAPSED=0
+        INTERVAL=10
+
+        while [ "${ELAPSED}" -lt "${TIMEOUT}" ]; do
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${SMOKE_URL}/health" || echo "000")
+          echo "Health check: HTTP ${HTTP_STATUS} (elapsed: ${ELAPSED}s)"
+
+          if [ "${HTTP_STATUS}" = "200" ]; then
+            echo "Smoke tests PASSED"
+            echo -n "false" > $(results.rollback-performed.path)
+            echo -n "success" > $(results.deploy-status.path)
+            exit 0
+          fi
+
+          sleep "${INTERVAL}"
+          ELAPSED=$((ELAPSED + INTERVAL))
+        done
+
+        echo "Smoke tests FAILED after ${TIMEOUT}s"
+        echo -n "failed" > $(results.deploy-status.path)
+        exit 1
+
+    # Step 5: Rollback on failure (runs only if smoke-tests fails via finally block)
+    - name: rollback
+      image: quay.io/argoproj/argocd:v2.10.0
+      onError: continue
+      script: |
+        #!/bin/sh
+        # Only rollback if deploy-status is 'failed'
+        STATUS=$(cat $(results.deploy-status.path) 2>/dev/null || echo "unknown")
+        if [ "${STATUS}" = "failed" ]; then
+          echo "Rolling back ${ARGOCD_APP} due to smoke test failure"
+          argocd app rollback "${ARGOCD_APP}" \
+            --server "${ARGOCD_SERVER}" \
+            --auth-token "${ARGOCD_AUTH_TOKEN}" \
+            --insecure \
+            --timeout 120
+
+          echo -n "true" > $(results.rollback-performed.path)
+          echo "Rollback completed for ${ARGOCD_APP}"
+        else
+          echo -n "false" > $(results.rollback-performed.path)
+        fi

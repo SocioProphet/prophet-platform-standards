@@ -1,0 +1,122 @@
+# ArgoCD Application Template
+# Implements ADR-040 (GitOps Strategy)
+#
+# Use this template as the base for all ArgoCD Application resources.
+# Replace all <PLACEHOLDER> values with your service-specific values.
+#
+# ADR References: ADR-040
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  # REQUIRED: Unique name for this application (e.g. sociosphere-staging)
+  name: <APP_NAME>
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    # Environment: staging | prod
+    environment: <ENVIRONMENT>
+    # Owning team
+    team: <TEAM_NAME>
+  annotations:
+    # Reference to the ADR that governs this application
+    adr.sociosphere.io/reference: "ADR-040"
+    # Link to the service's documentation
+    adr.sociosphere.io/service-docs: "<DOCS_URL>"
+    # Notification recipients
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: <SLACK_CHANNEL>
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: <SLACK_CHANNEL>
+    notifications.argoproj.io/subscribe.on-deployed.slack: <SLACK_CHANNEL>
+  finalizers:
+    # Remove this finalizer only if you want to orphan resources on delete
+    - resources-finalizer.argocd.argoproj.io
+
+spec:
+  # ─────────────────────────────────────────────────────────────
+  # Project: must reference an AppProject (see appproject-template.yaml)
+  # ─────────────────────────────────────────────────────────────
+  project: <PROJECT_NAME>
+
+  # ─────────────────────────────────────────────────────────────
+  # Source: Git repository containing Kubernetes manifests
+  # Per ADR-040: Git is the single source of truth
+  # ─────────────────────────────────────────────────────────────
+  source:
+    # REQUIRED: Git repository URL
+    repoURL: https://github.com/SocioProphet/<GITOPS_REPO>
+    # REQUIRED: Target branch (main for prod, staging for staging)
+    targetRevision: <TARGET_BRANCH>
+    # REQUIRED: Path within the repo containing manifests for this environment
+    path: k8s/<ENVIRONMENT>
+
+    # Option A: Kustomize overlays (recommended)
+    kustomize:
+      images:
+        # Updated automatically by Tekton deploy task (ADR-040)
+        - <IMAGE_REGISTRY>/<IMAGE_NAME>:<IMAGE_TAG>
+
+    # Option B: Helm chart (uncomment if using Helm)
+    # helm:
+    #   valueFiles:
+    #     - values.yaml
+    #     - values-<ENVIRONMENT>.yaml
+    #   parameters:
+    #     - name: image.tag
+    #       value: <IMAGE_TAG>
+
+  # ─────────────────────────────────────────────────────────────
+  # Destination: Target cluster and namespace
+  # ─────────────────────────────────────────────────────────────
+  destination:
+    # In-cluster deployment (use https://kubernetes.default.svc for same cluster)
+    server: https://kubernetes.default.svc
+    # REQUIRED: Target namespace
+    namespace: <TARGET_NAMESPACE>
+
+  # ─────────────────────────────────────────────────────────────
+  # Sync Policy: Per ADR-040 GitOps model
+  # - Staging: automatic sync with self-healing
+  # - Prod: manual sync gate (change automated to false)
+  # ─────────────────────────────────────────────────────────────
+  syncPolicy:
+    automated:
+      # Staging: true | Prod: false (require manual sync)
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    managedNamespaceMetadata:
+      labels:
+        # Required for Kyverno network policies
+        prophetsphere.io/managed: "true"
+        environment: <ENVIRONMENT>
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # ─────────────────────────────────────────────────────────────
+  # Revision History: Keep last 10 revisions for rollback
+  # Per ADR-040: rollback via git revert + ArgoCD sync
+  # ─────────────────────────────────────────────────────────────
+  revisionHistoryLimit: 10
+
+  # ─────────────────────────────────────────────────────────────
+  # Ignore Differences: Resources managed outside GitOps
+  # (e.g., HPA replicas, Secret values injected by external-secrets)
+  # ─────────────────────────────────────────────────────────────
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: ""
+      kind: Secret
+      jsonPointers:
+        - /data

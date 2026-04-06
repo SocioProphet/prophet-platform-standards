@@ -1,0 +1,60 @@
+# ClusterRole: Admin
+# Implements ADR-050 (DevSecOps, RBAC, and Audit Standards)
+#
+# Persona: Admin — Cluster operators only
+# Scope: Full cluster access
+# WARNING: This role grants FULL cluster access. Bind only to cluster operators.
+# All bindings MUST be tracked in Git and reviewed by Security Team.
+#
+# ADR References: ADR-050
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prophet-admin
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    rbac.sociosphere.io/persona: admin
+  annotations:
+    adr.sociosphere.io/reference: "ADR-050"
+    adr.sociosphere.io/persona: "admin"
+    adr.sociosphere.io/description: |
+      Full cluster access for platform operators. Bind sparingly.
+      All admin bindings require Security Team approval.
+rules:
+  # Full access to all resources in all API groups
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+  # Non-resource URLs (health checks, metrics endpoints)
+  - nonResourceURLs: ["*"]
+    verbs: ["*"]
+---
+# ClusterRoleBinding: Example — bind to a specific user (fill in subjects)
+# Store this binding in rbac/ and apply via GitOps (ADR-040)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prophet-admin-binding
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    rbac.sociosphere.io/persona: admin
+  annotations:
+    adr.sociosphere.io/reference: "ADR-050"
+    # REQUIRED: Justification for admin binding
+    rbac.sociosphere.io/justification: "<JUSTIFICATION>"
+    # REQUIRED: Approved by (Security Team member)
+    rbac.sociosphere.io/approved-by: "<APPROVER>"
+    rbac.sociosphere.io/approved-date: "<YYYY-MM-DD>"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prophet-admin
+subjects:
+  # Replace with actual admin users/groups
+  # - kind: User
+  #   name: <GITHUB_USERNAME>
+  #   apiGroup: rbac.authorization.k8s.io
+  # - kind: Group
+  #   name: <ORG_NAME>:platform-admins
+  #   apiGroup: rbac.authorization.k8s.io

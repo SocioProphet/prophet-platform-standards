@@ -1,0 +1,276 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_JAEGER",
+      "label": "Jaeger",
+      "description": "Prophet Platform Jaeger datasource",
+      "type": "datasource",
+      "pluginId": "jaeger",
+      "pluginName": "Jaeger"
+    },
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Prophet Platform Prometheus datasource",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0"},
+    {"type": "datasource", "id": "jaeger", "name": "Jaeger", "version": "1.0.0"},
+    {"type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0"},
+    {"type": "panel", "id": "traces", "name": "Traces", "version": ""},
+    {"type": "panel", "id": "timeseries", "name": "Time series", "version": ""},
+    {"type": "panel", "id": "stat", "name": "Stat", "version": ""},
+    {"type": "panel", "id": "nodeGraph", "name": "Node Graph", "version": ""}
+  ],
+  "description": "End-to-end propagation waterfall: webhook → pipeline → deploy. Bottleneck identification. ADR-060.",
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 100,
+      "title": "Propagation SLO Summary",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 30},
+              {"color": "red", "value": 60}
+            ]
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 1},
+      "id": 1,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"},
+      "title": "E2E Propagation p95",
+      "description": "Target: <60s p95",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.95, sum(rate(prophet_propagation_end_to_end_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 15},
+              {"color": "red", "value": 30}
+            ]
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 1},
+      "id": 2,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"},
+      "title": "Webhook → Pipeline p50",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.50, sum(rate(prophet_webhook_delivery_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 300},
+              {"color": "red", "value": 600}
+            ]
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 1},
+      "id": 3,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"},
+      "title": "Build Duration p95",
+      "description": "Target: <10min",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.95, sum(rate(prophet_build_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "Build p95",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 85},
+              {"color": "green", "value": 90}
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 1},
+      "id": 4,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"},
+      "title": "Propagation Success Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "expr": "100 * prophet_propagation_success_rate",
+          "legendFormat": "Success Rate",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5},
+      "id": 101,
+      "title": "E2E Latency Breakdown",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "palette-classic"}, "unit": "s", "custom": {"stacking": {"mode": "normal", "group": "A"}}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Webhook Processing"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
+          {"matcher": {"id": "byName", "options": "Build & Sign"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "Test"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]},
+          {"matcher": {"id": "byName", "options": "ArgoCD Sync"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "purple"}}]}
+        ]
+      },
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 6},
+      "id": 5,
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "none"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "title": "Propagation Stage Breakdown (Stacked)",
+      "description": "Stacked view of time spent in each pipeline stage. Identify bottlenecks.",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.95, sum(rate(prophet_webhook_delivery_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "Webhook Processing",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.95, sum(rate(prophet_build_duration_seconds_bucket{stage=\"build\"}[5m])) by (le))",
+          "legendFormat": "Build & Sign",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.95, sum(rate(prophet_build_duration_seconds_bucket{stage=\"test\"}[5m])) by (le))",
+          "legendFormat": "Test",
+          "refId": "C"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "expr": "histogram_quantile(0.95, sum(rate(prophet_argocd_sync_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "ArgoCD Sync",
+          "refId": "D"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 16},
+      "id": 102,
+      "title": "Trace Explorer",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "jaeger", "uid": "${DS_JAEGER}"},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 17},
+      "id": 6,
+      "options": {
+        "traceIdVariable": "${__value.raw}",
+        "createNewTab": false
+      },
+      "title": "Recent Propagation Traces",
+      "description": "Click a trace to see the full waterfall: webhook → build → test → deploy",
+      "type": "traces",
+      "targets": [
+        {
+          "datasource": {"type": "jaeger", "uid": "${DS_JAEGER}"},
+          "queryType": "search",
+          "service": "propagation-engine",
+          "operation": "propagation.run",
+          "tags": "repo=${repo}",
+          "limit": 20,
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["prophet-platform", "propagation", "waterfall", "adr-060"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+        "definition": "label_values(prophet_propagation_runs_total, repo)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": false,
+        "name": "repo",
+        "options": [],
+        "query": {"query": "label_values(prophet_propagation_runs_total, repo)", "refId": "A"},
+        "refresh": 2,
+        "sort": 1,
+        "type": "query",
+        "label": "Repository"
+      }
+    ]
+  },
+  "time": {"from": "now-3h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Prophet Platform — Propagation Waterfall",
+  "uid": "prophet-propagation-waterfall",
+  "version": 1
+}

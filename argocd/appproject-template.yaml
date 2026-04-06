@@ -1,0 +1,147 @@
+# ArgoCD AppProject Template
+# Implements ADR-040 (GitOps Strategy) and ADR-050 (RBAC)
+#
+# AppProject enforces namespace isolation and RBAC for ArgoCD Applications.
+# Each team/service group should have its own AppProject.
+#
+# ADR References: ADR-040, ADR-050
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  # REQUIRED: Unique project name (e.g. sociosphere, platform-infra)
+  name: <PROJECT_NAME>
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+  annotations:
+    adr.sociosphere.io/reference: "ADR-040,ADR-050"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+
+spec:
+  description: "<PROJECT_DESCRIPTION>"
+
+  # ─────────────────────────────────────────────────────────────
+  # Source Repositories: Allowlist of Git repos this project can deploy from
+  # Per ADR-040: all sources must be in the SocioProphet org
+  # Use specific repo URLs; avoid '*' in production
+  # ─────────────────────────────────────────────────────────────
+  sourceRepos:
+    - https://github.com/SocioProphet/<GITOPS_REPO>
+    # Add additional repos as needed:
+    # - https://github.com/SocioProphet/<ANOTHER_REPO>
+
+  # ─────────────────────────────────────────────────────────────
+  # Destination Clusters and Namespaces
+  # Per ADR-050: namespace isolation is mandatory
+  # ─────────────────────────────────────────────────────────────
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: <PRIMARY_NAMESPACE>
+    # Staging namespace
+    - server: https://kubernetes.default.svc
+      namespace: <PRIMARY_NAMESPACE>-staging
+    # Additional namespaces (e.g. for dependent services)
+    # - server: https://kubernetes.default.svc
+    #   namespace: <SECONDARY_NAMESPACE>
+
+  # ─────────────────────────────────────────────────────────────
+  # Cluster Resource Allow List
+  # Only include cluster-level resources this project needs to manage
+  # Per ADR-050: principle of least privilege
+  # ─────────────────────────────────────────────────────────────
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+    # Uncomment if managing CRDs:
+    # - group: apiextensions.k8s.io
+    #   kind: CustomResourceDefinition
+
+  # ─────────────────────────────────────────────────────────────
+  # Namespace Resource Blacklist
+  # Resources that should NEVER be deployed via ArgoCD for this project
+  # ─────────────────────────────────────────────────────────────
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: LimitRange
+
+  # ─────────────────────────────────────────────────────────────
+  # RBAC: Per ADR-050 persona model
+  # Roles: admin, developer (read-only), deployer, auditor (read-only)
+  # ─────────────────────────────────────────────────────────────
+  roles:
+    # Admin: full project management
+    - name: admin
+      description: "Full access to this AppProject's applications"
+      policies:
+        - p, proj:<PROJECT_NAME>:admin, applications, *, <PROJECT_NAME>/*, allow
+        - p, proj:<PROJECT_NAME>:admin, repositories, *, *, allow
+      groups:
+        - <ORG_NAME>:platform-admins
+
+    # Deployer: sync and manage applications (CI/CD service accounts)
+    - name: deployer
+      description: "Deploy applications (used by Tekton SA)"
+      policies:
+        - p, proj:<PROJECT_NAME>:deployer, applications, get, <PROJECT_NAME>/*, allow
+        - p, proj:<PROJECT_NAME>:deployer, applications, sync, <PROJECT_NAME>/*, allow
+        - p, proj:<PROJECT_NAME>:deployer, applications, action/*, <PROJECT_NAME>/*, allow
+      groups:
+        - <ORG_NAME>:deployers
+
+    # Developer: read-only access to applications
+    - name: developer
+      description: "Read-only access for developers"
+      policies:
+        - p, proj:<PROJECT_NAME>:developer, applications, get, <PROJECT_NAME>/*, allow
+        - p, proj:<PROJECT_NAME>:developer, logs, get, <PROJECT_NAME>/*, allow
+      groups:
+        - <ORG_NAME>:developers
+
+    # Auditor: read-only access for compliance
+    - name: auditor
+      description: "Read-only access for compliance auditors"
+      policies:
+        - p, proj:<PROJECT_NAME>:auditor, applications, get, <PROJECT_NAME>/*, allow
+      groups:
+        - <ORG_NAME>:auditors
+
+  # ─────────────────────────────────────────────────────────────
+  # Orphaned Resources: Alert on resources in project namespaces
+  # not managed by any ArgoCD Application
+  # ─────────────────────────────────────────────────────────────
+  orphanedResources:
+    warn: true
+    ignore:
+      # Ignore Kubernetes-managed resources
+      - group: ""
+        kind: ConfigMap
+        name: kube-root-ca.crt
+      - group: ""
+        kind: ServiceAccount
+        name: default
+
+  # ─────────────────────────────────────────────────────────────
+  # Sync Windows: Optional deployment windows
+  # Uncomment to restrict when prod syncs can occur
+  # ─────────────────────────────────────────────────────────────
+  # syncWindows:
+  #   - kind: allow
+  #     schedule: "0 6 * * 1-5"   # Weekdays 06:00 UTC
+  #     duration: 12h
+  #     applications:
+  #       - "*-prod"
+  #     namespaces:
+  #       - <PRIMARY_NAMESPACE>
+  #   - kind: deny
+  #     schedule: "0 0 * * 6,0"   # Weekends
+  #     duration: 48h
+  #     applications:
+  #       - "*-prod"

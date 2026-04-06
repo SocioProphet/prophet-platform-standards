@@ -1,0 +1,111 @@
+# ClusterRole: Auditor
+# Implements ADR-050 (DevSecOps, RBAC, and Audit Standards)
+#
+# Persona: Auditor — Compliance and security team
+# Scope: Read-only access to audit logs, pod events, and deployments
+# Restrictions: NO create, update, delete, exec, or port-forward
+#
+# ADR References: ADR-050
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prophet-auditor
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    rbac.sociosphere.io/persona: auditor
+  annotations:
+    adr.sociosphere.io/reference: "ADR-050"
+    adr.sociosphere.io/persona: "auditor"
+    adr.sociosphere.io/description: |
+      Read-only access for compliance auditors. Provides visibility into
+      deployments, pod events, Tekton pipeline runs, and ArgoCD sync history.
+      Cannot access Secrets, exec into pods, or modify any resource.
+rules:
+  # Read pods (no exec, no port-forward, no log streaming)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+  # Read events (critical for audit trail)
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+
+  # Read namespaces
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+
+  # Read services (for topology understanding)
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list"]
+
+  # Read ConfigMaps (non-sensitive configuration review)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+
+  # Read deployments and workload controllers
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+
+  # Read Tekton PipelineRuns and TaskRuns (build/deploy audit trail)
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelineruns", "taskruns", "pipelines", "tasks"]
+    verbs: ["get", "list", "watch"]
+
+  # Read ArgoCD Applications (deployment history)
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "applicationsets", "appprojects"]
+    verbs: ["get", "list", "watch"]
+
+  # Read RBAC resources (for RBAC compliance review)
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
+    verbs: ["get", "list"]
+
+  # Read Kyverno policy reports (for policy compliance review)
+  - apiGroups: ["wgpolicyk8s.io"]
+    resources: ["policyreports", "clusterpolicyreports"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["kyverno.io"]
+    resources: ["policies", "clusterpolicies"]
+    verbs: ["get", "list"]
+
+  # Read ServiceAccounts (for RBAC audit)
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list"]
+
+  # Read network policies (for security posture review)
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies", "ingresses"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prophet-auditor-binding
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    rbac.sociosphere.io/persona: auditor
+  annotations:
+    adr.sociosphere.io/reference: "ADR-050"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prophet-auditor
+subjects:
+  # Replace with actual auditor users/groups
+  # - kind: Group
+  #   name: <ORG_NAME>:auditors
+  #   apiGroup: rbac.authorization.k8s.io
+  # - kind: User
+  #   name: <AUDITOR_USERNAME>
+  #   apiGroup: rbac.authorization.k8s.io

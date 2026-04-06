@@ -1,0 +1,95 @@
+# Kyverno Policy: Signed Images
+# Implements ADR-050 (DevSecOps, RBAC, and Audit Standards)
+#
+# All container images MUST be signed by an authorized cosign key before
+# they can be admitted to the cluster. Unsigned images are rejected.
+#
+# Enforcement mode: Enforce (not Audit)
+# Failure behavior: Reject pod admission
+# Exclusions: system namespaces (kube-system, kube-public, argocd, tekton-pipelines)
+#
+# ADR References: ADR-050
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-signed-images
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    kyverno.io/category: supply-chain-security
+  annotations:
+    policies.kyverno.io/title: Require Signed Container Images
+    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/severity: critical
+    policies.kyverno.io/subject: Pod, Container
+    adr.sociosphere.io/reference: "ADR-050"
+    policies.kyverno.io/description: |
+      All container images deployed to the cluster must be signed using
+      cosign/Sigstore. Unsigned images are rejected at admission time.
+      This enforces SLSA L3 supply chain requirements per ADR-050.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: verify-image-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sociosphere
+                - "!kube-system"
+                - "!kube-public"
+                - "!kube-node-lease"
+                - "!argocd"
+                - "!tekton-pipelines"
+                - "!cert-manager"
+      exclude:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - tekton-pipelines
+                - cert-manager
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/sociosphere/*"
+            - "ghcr.io/SocioProphet/*"
+          # Option A: Keyless Sigstore verification (OIDC-based)
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    subject: "https://github.com/SocioProphet/*/.github/workflows/*.yaml@refs/heads/main"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev
+          # Option B: Key-based verification (uncomment if using a fixed key)
+          # attestors:
+          #   - count: 1
+          #     entries:
+          #       - keys:
+          #           publicKeys: |-
+          #             -----BEGIN PUBLIC KEY-----
+          #             <YOUR_COSIGN_PUBLIC_KEY>
+          #             -----END PUBLIC KEY-----
+
+          # Verify SBOM attestation is present
+          attestations:
+            - predicateType: https://spdx.dev/Document
+              conditions:
+                - all:
+                    - key: "{{ spdxVersion }}"
+                      operator: NotEquals
+                      value: ""
+
+          # Mutate image reference to use digest (immutable reference)
+          mutateDigest: true
+          verifyDigest: true
+          required: true

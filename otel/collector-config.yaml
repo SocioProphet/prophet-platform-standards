@@ -1,0 +1,337 @@
+# OTEL Collector Configuration
+# Implements ADR-060 (OTEL Observability and Telemetry Standards)
+#
+# Deployment: Sidecar injected into every production Pod
+# Receivers:  gRPC (port 4317), HTTP (port 4318)
+# Processors: batch, memory_limiter, tail_sampling
+# Exporters:  Prometheus (metrics), Jaeger (traces), Loki (logs)
+#
+# ADR References: ADR-060
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: sociosphere
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    app.kubernetes.io/component: observability
+  annotations:
+    adr.sociosphere.io/reference: "ADR-060"
+data:
+  collector.yaml: |
+    # ─────────────────────────────────────────────────────────────
+    # Extensions
+    # ─────────────────────────────────────────────────────────────
+    extensions:
+      health_check:
+        endpoint: "0.0.0.0:13133"
+        path: "/health"
+      pprof:
+        endpoint: "localhost:1777"
+      zpages:
+        endpoint: "localhost:55679"
+
+    # ─────────────────────────────────────────────────────────────
+    # Receivers
+    # ─────────────────────────────────────────────────────────────
+    receivers:
+      # OTLP gRPC — primary receiver for all services
+      otlp:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+            max_recv_msg_size_mib: 4
+          http:
+            endpoint: "0.0.0.0:4318"
+            cors:
+              allowed_origins:
+                - "http://localhost:*"
+
+      # Prometheus scrape (for services exposing /metrics)
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: "prophet-platform"
+              scrape_interval: 15s
+              static_configs:
+                - targets:
+                    - "localhost:8080"
+              relabel_configs:
+                - source_labels: [__address__]
+                  target_label: instance
+
+    # ─────────────────────────────────────────────────────────────
+    # Processors
+    # ─────────────────────────────────────────────────────────────
+    processors:
+      # Memory limiter: prevent OOM in the sidecar
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 90
+        spike_limit_mib: 20
+
+      # Batch: improve throughput by batching signals
+      batch:
+        timeout: 5s
+        send_batch_size: 1024
+        send_batch_max_size: 2048
+
+      # Resource detector: add k8s pod/node metadata to all signals
+      resourcedetection:
+        detectors:
+          - env
+          - kubernetes_node
+        timeout: 2s
+        override: false
+
+      # Kubernetes attributes: enrich with pod labels/annotations
+      k8sattributes:
+        auth_type: serviceAccount
+        passthrough: false
+        filter:
+          node_from_env_var: KUBE_NODE_NAME
+        extract:
+          metadata:
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.deployment.name
+            - k8s.statefulset.name
+            - k8s.daemonset.name
+            - k8s.namespace.name
+            - k8s.node.name
+            - k8s.pod.start_time
+          labels:
+            - tag_name: app
+              key: app.kubernetes.io/name
+              from: pod
+            - tag_name: version
+              key: app.kubernetes.io/version
+              from: pod
+            - tag_name: environment
+              key: environment
+              from: pod
+
+      # Tail sampling: 100% for errors, 10% for success paths
+      tail_sampling:
+        decision_wait: 10s
+        num_traces: 50000
+        expected_new_traces_per_sec: 100
+        policies:
+          # Always sample errors
+          - name: errors-policy
+            type: status_code
+            status_code:
+              status_codes:
+                - ERROR
+          # Always sample slow traces (>5s)
+          - name: slow-traces-policy
+            type: latency
+            latency:
+              threshold_ms: 5000
+          # Sample 10% of normal traffic
+          - name: probabilistic-policy
+            type: probabilistic
+            probabilistic:
+              sampling_percentage: 10
+
+      # Add platform-wide resource attributes
+      resource:
+        attributes:
+          - key: platform
+            value: prophet-platform
+            action: insert
+          - key: adr.reference
+            value: ADR-060
+            action: insert
+
+    # ─────────────────────────────────────────────────────────────
+    # Exporters
+    # ─────────────────────────────────────────────────────────────
+    exporters:
+      # Prometheus: metrics exporter
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+        namespace: prophet
+        const_labels:
+          platform: prophet-platform
+        send_timestamps: true
+        metric_expiration: 180m
+        resource_to_telemetry_conversion:
+          enabled: true
+
+      # Jaeger: trace exporter (via OTLP)
+      otlp/jaeger:
+        endpoint: "jaeger-collector.monitoring.svc.cluster.local:4317"
+        tls:
+          insecure: false
+          ca_file: /etc/ssl/certs/ca-certificates.crt
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+
+      # Loki: log exporter
+      loki:
+        endpoint: "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+        tls:
+          insecure: true
+        labels:
+          resource_labels:
+            - k8s.namespace.name
+            - k8s.pod.name
+            - k8s.deployment.name
+            - service.name
+            - environment
+        format: json
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_elapsed_time: 300s
+
+      # Debug: stdout exporter (disable in production)
+      # debug:
+      #   verbosity: detailed
+
+    # ─────────────────────────────────────────────────────────────
+    # Service: Wire pipelines together
+    # ─────────────────────────────────────────────────────────────
+    service:
+      extensions:
+        - health_check
+        - pprof
+        - zpages
+
+      pipelines:
+        # Traces pipeline: OTLP → sampling → Jaeger
+        traces:
+          receivers:
+            - otlp
+          processors:
+            - memory_limiter
+            - k8sattributes
+            - resourcedetection
+            - resource
+            - tail_sampling
+            - batch
+          exporters:
+            - otlp/jaeger
+
+        # Metrics pipeline: OTLP + Prometheus scrape → Prometheus
+        metrics:
+          receivers:
+            - otlp
+            - prometheus
+          processors:
+            - memory_limiter
+            - k8sattributes
+            - resourcedetection
+            - resource
+            - batch
+          exporters:
+            - prometheus
+
+        # Logs pipeline: OTLP → Loki
+        logs:
+          receivers:
+            - otlp
+          processors:
+            - memory_limiter
+            - k8sattributes
+            - resourcedetection
+            - resource
+            - batch
+          exporters:
+            - loki
+
+      telemetry:
+        logs:
+          level: warn
+          output_paths:
+            - stdout
+        metrics:
+          level: basic
+          address: "localhost:8888"
+---
+# DaemonSet: Deploy OTEL Collector sidecar injector
+# (Alternative: use cert-manager + mutating webhook for automatic injection)
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: otel-collector
+  namespace: sociosphere
+  labels:
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/part-of: prophet-platform
+    app.kubernetes.io/component: observability
+  annotations:
+    adr.sociosphere.io/reference: "ADR-060"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: otel-collector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: otel-collector
+        app.kubernetes.io/part-of: prophet-platform
+    spec:
+      serviceAccountName: otel-collector-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.96.0
+          args:
+            - "--config=/conf/collector.yaml"
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: prometheus
+              containerPort: 8889
+              protocol: TCP
+            - name: health
+              containerPort: 13133
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: collector-config
+              mountPath: /conf
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 13133
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 13133
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: collector-config
+          configMap:
+            name: otel-collector-config
