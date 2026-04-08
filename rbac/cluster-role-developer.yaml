@@ -1,0 +1,101 @@
+# ClusterRole: Developer
+# Implements ADR-050 (DevSecOps, RBAC, and Audit Standards)
+#
+# Persona: Developer — Application developers
+# Scope: Read pods, logs, events; exec port-forward; view deployments
+# Restrictions: NO create, update, delete, or patch on any resource
+#
+# ADR References: ADR-050
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prophet-developer
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    rbac.sociosphere.io/persona: developer
+  annotations:
+    adr.sociosphere.io/reference: "ADR-050"
+    adr.sociosphere.io/persona: "developer"
+    adr.sociosphere.io/description: |
+      Read-only access for application developers. Allows viewing
+      pods, logs, events, and deployments. Cannot create, modify,
+      or delete any cluster resources.
+rules:
+  # Read pods and exec port-forward
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/portforward"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+
+  # Read services and endpoints
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+
+  # Read events
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+
+  # Read ConfigMaps (non-secret configuration)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+
+  # Read namespaces (for context)
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+
+  # Read deployments, replicasets, daemonsets, statefulsets
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+
+  # Read horizontal pod autoscalers
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+
+  # Read ingresses
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch"]
+
+  # Read Tekton resources (for pipeline visibility)
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelineruns", "taskruns", "pipelines", "tasks"]
+    verbs: ["get", "list", "watch"]
+
+  # Read ArgoCD applications (view deployments)
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prophet-developer-binding
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    rbac.sociosphere.io/persona: developer
+  annotations:
+    adr.sociosphere.io/reference: "ADR-050"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prophet-developer
+subjects:
+  # Replace with actual developer users/groups
+  # - kind: Group
+  #   name: <ORG_NAME>:developers
+  #   apiGroup: rbac.authorization.k8s.io

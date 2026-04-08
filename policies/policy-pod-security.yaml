@@ -1,0 +1,179 @@
+# Kyverno Policy: Pod Security
+# Implements ADR-050 (DevSecOps, RBAC, and Audit Standards)
+#
+# Enforces the following pod security requirements:
+#   - No privileged containers
+#   - Read-only root filesystem
+#   - Non-root user (UID ≥ 1000)
+#   - No host networking, PID, or IPC namespace sharing
+#   - No dangerous capabilities
+#   - No privilege escalation
+#
+# Enforcement mode: Enforce
+# Failure behavior: Reject pod admission
+#
+# ADR References: ADR-050
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: enforce-pod-security
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    kyverno.io/category: pod-security
+  annotations:
+    policies.kyverno.io/title: Enforce Pod Security Standards
+    policies.kyverno.io/category: Pod Security
+    policies.kyverno.io/severity: critical
+    policies.kyverno.io/subject: Pod, Container
+    adr.sociosphere.io/reference: "ADR-050"
+    policies.kyverno.io/description: |
+      Enforces pod security hardening: no privileged containers,
+      read-only root filesystem, non-root users, no host namespace
+      sharing, no dangerous Linux capabilities. Implements the
+      Kubernetes restricted Pod Security Standard.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    # Rule 1: No privileged containers
+    - name: deny-privileged-containers
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - tekton-pipelines
+      validate:
+        message: |
+          Privileged containers are not allowed. Remove securityContext.privileged: true.
+          See ADR-050 and docs/RBAC_GUIDE.md for pod security requirements.
+        pattern:
+          spec:
+            containers:
+              - =(securityContext):
+                  =(privileged): "false"
+            =(initContainers):
+              - =(securityContext):
+                  =(privileged): "false"
+
+    # Rule 2: Require read-only root filesystem
+    - name: require-readonly-rootfs
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sociosphere
+      validate:
+        message: |
+          Containers must use a read-only root filesystem.
+          Set securityContext.readOnlyRootFilesystem: true.
+          Mount writable paths as emptyDir volumes if needed.
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  readOnlyRootFilesystem: true
+
+    # Rule 3: Require non-root user
+    - name: require-non-root-user
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sociosphere
+      validate:
+        message: |
+          Containers must run as a non-root user.
+          Set securityContext.runAsNonRoot: true and runAsUser >= 1000.
+        pattern:
+          spec:
+            =(securityContext):
+              =(runAsNonRoot): true
+            containers:
+              - securityContext:
+                  runAsNonRoot: true
+                  runAsUser: ">999"
+
+    # Rule 4: No host networking, PID, or IPC namespaces
+    - name: deny-host-namespaces
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+      validate:
+        message: |
+          Host networking, hostPID, and hostIPC are not allowed.
+          Remove hostNetwork: true, hostPID: true, and hostIPC: true from pod spec.
+        pattern:
+          spec:
+            =(hostNetwork): "false"
+            =(hostPID): "false"
+            =(hostIPC): "false"
+
+    # Rule 5: No privilege escalation
+    - name: deny-privilege-escalation
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sociosphere
+      validate:
+        message: |
+          Privilege escalation is not allowed.
+          Set securityContext.allowPrivilegeEscalation: false.
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  allowPrivilegeEscalation: false
+            =(initContainers):
+              - securityContext:
+                  allowPrivilegeEscalation: false
+
+    # Rule 6: Drop all capabilities
+    - name: require-drop-all-capabilities
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sociosphere
+      validate:
+        message: |
+          All Linux capabilities must be dropped.
+          Set securityContext.capabilities.drop: [ALL].
+          Add back only the specific capabilities required.
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  capabilities:
+                    drop:
+                      - ALL

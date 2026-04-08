@@ -1,0 +1,158 @@
+# ArgoCD ApplicationSet: Multi-Environment Deployment
+# Implements ADR-040 (GitOps Strategy)
+#
+# Automatically generates Application resources for dev, staging, and prod.
+# Promotion flow:
+#   dev (auto-sync) → staging (auto-sync) → prod (manual gate)
+#
+# Rollback strategy: git revert the offending commit → ArgoCD auto-syncs
+#
+# ADR References: ADR-040
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: <SERVICE_NAME>-multienv
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+  annotations:
+    adr.sociosphere.io/reference: "ADR-040"
+
+spec:
+  # ─────────────────────────────────────────────────────────────
+  # Generators: Define environments and their parameters
+  # Each entry generates one ArgoCD Application
+  # ─────────────────────────────────────────────────────────────
+  generators:
+    - list:
+        elements:
+          # Development environment: auto-sync, no gate
+          - env: dev
+            namespace: <SERVICE_NAME>-dev
+            branch: develop
+            autoSync: "true"
+            requiresApproval: "false"
+            replicaCount: "1"
+            resourcesPreset: small
+            smokeTestUrl: "http://<SERVICE_NAME>.dev.svc.cluster.local"
+
+          # Staging environment: auto-sync after passing CI, no manual gate
+          - env: staging
+            namespace: <SERVICE_NAME>-staging
+            branch: main
+            autoSync: "true"
+            requiresApproval: "false"
+            replicaCount: "2"
+            resourcesPreset: medium
+            smokeTestUrl: "http://<SERVICE_NAME>.staging.svc.cluster.local"
+
+          # Production environment: manual sync gate required
+          # Per ADR-040: prod MUST require manual approval
+          - env: prod
+            namespace: <SERVICE_NAME>-prod
+            branch: main
+            autoSync: "false"
+            requiresApproval: "true"
+            replicaCount: "3"
+            resourcesPreset: large
+            smokeTestUrl: "https://<SERVICE_NAME>.sociosphere.io"
+
+  # ─────────────────────────────────────────────────────────────
+  # Template: Application generated per environment
+  # ─────────────────────────────────────────────────────────────
+  template:
+    metadata:
+      name: "<SERVICE_NAME>-{{env}}"
+      namespace: argocd
+      labels:
+        app.kubernetes.io/part-of: prophet-platform
+        environment: "{{env}}"
+        service: <SERVICE_NAME>
+      annotations:
+        adr.sociosphere.io/reference: "ADR-040"
+        notifications.argoproj.io/subscribe.on-sync-failed.slack: "#deployments"
+        notifications.argoproj.io/subscribe.on-deployed.slack: "#deployments"
+        notifications.argoproj.io/subscribe.on-health-degraded.slack: "#alerts"
+
+    spec:
+      project: <PROJECT_NAME>
+
+      source:
+        repoURL: https://github.com/SocioProphet/<GITOPS_REPO>
+        targetRevision: "{{branch}}"
+        path: k8s/{{env}}
+        kustomize:
+          commonLabels:
+            environment: "{{env}}"
+            app.kubernetes.io/part-of: prophet-platform
+          images:
+            - <IMAGE_REGISTRY>/<SERVICE_NAME>:<IMAGE_TAG>
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{namespace}}"
+
+      syncPolicy:
+        automated:
+          # autoSync=true → prune and self-heal (dev and staging)
+          # autoSync=false → manual gate (prod)
+          prune: "{{autoSync}}"
+          selfHeal: "{{autoSync}}"
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - PrunePropagationPolicy=foreground
+        retry:
+          limit: 3
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+
+      revisionHistoryLimit: 10
+
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas
+
+  # ─────────────────────────────────────────────────────────────
+  # Strategy: Control rollout order across environments
+  # ─────────────────────────────────────────────────────────────
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        # Step 1: dev (always first)
+        - matchExpressions:
+            - key: environment
+              operator: In
+              values:
+                - dev
+        # Step 2: staging (after dev is healthy)
+        - matchExpressions:
+            - key: environment
+              operator: In
+              values:
+                - staging
+        # Step 3: prod (manual gate — requiresApproval=true)
+        - matchExpressions:
+            - key: environment
+              operator: In
+              values:
+                - prod
+
+  # ─────────────────────────────────────────────────────────────
+  # Preserve resources when ApplicationSet is deleted
+  # (prevents accidental production resource deletion)
+  # ─────────────────────────────────────────────────────────────
+  preservedFields:
+    annotations:
+      - "kubectl.kubernetes.io/last-applied-configuration"
+
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error

@@ -1,0 +1,144 @@
+{
+  "type": "record",
+  "name": "AuditEvent",
+  "namespace": "io.sociosphere.platform.audit",
+  "doc": "Immutable audit log event for the Prophet Platform. Per ADR-050.",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string",
+      "doc": "UUID v4 primary key. Generated at write time."
+    },
+    {
+      "name": "timestamp",
+      "type": "long",
+      "doc": "Unix epoch milliseconds (UTC). Immutable once written.",
+      "logicalType": "timestamp-millis"
+    },
+    {
+      "name": "actor",
+      "type": {
+        "type": "record",
+        "name": "Actor",
+        "doc": "The entity that performed the action.",
+        "fields": [
+          {
+            "name": "user_id",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "GitHub user login (e.g. 'mdheller'). Null for service account actions."
+          },
+          {
+            "name": "service_account",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "Kubernetes ServiceAccount name (e.g. 'webhook-sa'). Null for human actions."
+          },
+          {
+            "name": "ip_address",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "Source IP address of the action. May be null for internal cluster actions."
+          }
+        ]
+      },
+      "doc": "Who performed the action."
+    },
+    {
+      "name": "action",
+      "type": "string",
+      "doc": "Action performed. Format: <domain>.<verb>. Examples: 'task.build', 'task.test', 'pipeline.complete', 'deploy.staging', 'deploy.prod', 'secret.access', 'rbac.violation'"
+    },
+    {
+      "name": "resource",
+      "type": {
+        "type": "record",
+        "name": "Resource",
+        "doc": "The resource affected by the action.",
+        "fields": [
+          {
+            "name": "repo",
+            "type": "string",
+            "doc": "GitHub repository full name (e.g. 'SocioProphet/sociosphere')."
+          },
+          {
+            "name": "ref",
+            "type": "string",
+            "doc": "Git ref (branch, tag, or commit SHA) at the time of the action."
+          },
+          {
+            "name": "path",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "File or resource path, if applicable (e.g. 'k8s/staging/deployment.yaml')."
+          }
+        ]
+      },
+      "doc": "The resource on which the action was performed."
+    },
+    {
+      "name": "status",
+      "type": {
+        "type": "enum",
+        "name": "Status",
+        "symbols": ["success", "failure", "in_progress"],
+        "doc": "Outcome of the action."
+      },
+      "doc": "Status of the action at the time of logging."
+    },
+    {
+      "name": "details",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "JSON-encoded string with additional context (e.g. image digest, test results, error message). Must not contain secrets."
+    },
+    {
+      "name": "adr_reference",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Reference to the ADR governing this action (e.g. 'ADR-040', 'ADR-050'). Used for compliance queries."
+    },
+    {
+      "name": "signature",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "cosign signature OCI reference for the artifact produced by this action. Null for non-build events."
+    },
+    {
+      "name": "trace_id",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "W3C TraceContext trace ID for correlation with OTEL traces (ADR-060). 32-character hex string."
+    },
+    {
+      "name": "pipeline_run_name",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Tekton PipelineRun name that produced this event. Null for non-pipeline events."
+    },
+    {
+      "name": "image_digest",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "SHA256 digest of the container image built or deployed (e.g. 'sha256:abc123...'). Null for non-image events."
+    },
+    {
+      "name": "sbom_url",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "OCI reference to the SBOM artifact. Null for non-build events."
+    },
+    {
+      "name": "attestation_url",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "OCI reference to the in-toto provenance attestation. Null for non-build events."
+    },
+    {
+      "name": "schema_version",
+      "type": "string",
+      "default": "1.0",
+      "doc": "Schema version for forward compatibility. Increment on breaking changes."
+    }
+  ]
+}

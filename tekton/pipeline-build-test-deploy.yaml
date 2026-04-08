@@ -1,0 +1,328 @@
+# Tekton Pipeline: Build → Test → Deploy
+# Implements ADR-040 (Tekton + ArgoCD + GitOps) and ADR-050 (DevSecOps)
+#
+# Flow:
+#   1. build  — container image build, cosign sign, syft SBOM, in-toto attestation
+#   2. test   — unit tests, integration tests, coverage ≥80%
+#   3. deploy-staging — ArgoCD sync to staging, smoke tests
+#   4. [manual gate for prod]
+#   5. deploy-prod — ArgoCD sync to prod, smoke tests
+#
+# All pipeline events are written to the immutable audit log (ADR-050).
+# Traces are emitted to OTEL collector (ADR-060).
+#
+# ADR References: ADR-040, ADR-050, ADR-060
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: build-test-deploy
+  namespace: sociosphere
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    app.kubernetes.io/component: pipeline
+  annotations:
+    adr.sociosphere.io/reference: "ADR-040,ADR-050,ADR-060"
+spec:
+  description: |
+    Full CI/CD pipeline: build signed artifact → test with coverage → deploy to staging
+    → (manual gate) → deploy to prod. Implements SLSA L3, ADR-040 GitOps model,
+    and ADR-050 audit logging.
+
+  params:
+    - name: repo-url
+      type: string
+      description: "Git repository URL (e.g. https://github.com/SocioProphet/sociosphere)"
+    - name: revision
+      type: string
+      description: "Git revision (commit SHA, branch, or tag)"
+    - name: image
+      type: string
+      description: "Target container image reference (e.g. ghcr.io/org/app)"
+    - name: dockerfile
+      type: string
+      default: "Dockerfile"
+    - name: context
+      type: string
+      default: "."
+    - name: registry-secret
+      type: string
+      default: "registry-credentials"
+    - name: argocd-server
+      type: string
+      default: "argocd-server.argocd.svc.cluster.local:443"
+    - name: argocd-staging-app
+      type: string
+      description: "ArgoCD Application name for staging"
+    - name: argocd-prod-app
+      type: string
+      description: "ArgoCD Application name for prod"
+    - name: staging-smoke-url
+      type: string
+      default: ""
+      description: "URL for staging smoke tests"
+    - name: prod-smoke-url
+      type: string
+      default: ""
+      description: "URL for prod smoke tests"
+    - name: coverage-threshold
+      type: string
+      default: "80"
+    - name: gitops-repo-url
+      type: string
+      description: "GitOps repository URL for image tag updates"
+    - name: gitops-secret
+      type: string
+      default: "gitops-credentials"
+    - name: argocd-token-secret
+      type: string
+      default: "argocd-token"
+    - name: skip-prod-deploy
+      type: string
+      default: "false"
+      description: "Set to 'true' to skip prod deployment (for feature branches)"
+
+  workspaces:
+    - name: shared-source
+      description: "Shared workspace for checked-out application source"
+    - name: attestations
+      description: "Workspace for SBOM and attestation files"
+    - name: test-results
+      description: "Workspace for test results and coverage reports"
+    - name: gitops-repo
+      description: "Checked-out GitOps repository"
+    - name: git-credentials
+      description: "Git SSH or token credentials"
+
+  results:
+    - name: image-digest
+      description: "SHA256 digest of the built and signed image"
+      value: $(tasks.build.results.image-digest)
+    - name: image-url
+      description: "Full image URL with digest"
+      value: $(tasks.build.results.image-url)
+    - name: sbom-url
+      description: "OCI reference to the generated SBOM"
+      value: $(tasks.build.results.sbom-url)
+    - name: attestation-url
+      description: "OCI reference to the in-toto attestation"
+      value: $(tasks.build.results.attestation-url)
+    - name: test-result
+      description: "Unit + integration test result"
+      value: $(tasks.test.results.test-result)
+    - name: coverage-percent
+      description: "Code coverage percentage"
+      value: $(tasks.test.results.coverage-percent)
+
+  tasks:
+    # ─────────────────────────────────────────────────────────────
+    # Task 1: Clone application source
+    # ─────────────────────────────────────────────────────────────
+    - name: clone-source
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: tekton-pipelines
+      params:
+        - name: url
+          value: $(params.repo-url)
+        - name: revision
+          value: $(params.revision)
+        - name: deleteExisting
+          value: "true"
+      workspaces:
+        - name: output
+          workspace: shared-source
+        - name: basic-auth
+          workspace: git-credentials
+
+    # ─────────────────────────────────────────────────────────────
+    # Task 2: Clone GitOps repository (parallel with source clone)
+    # ─────────────────────────────────────────────────────────────
+    - name: clone-gitops
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: tekton-pipelines
+      params:
+        - name: url
+          value: $(params.gitops-repo-url)
+        - name: revision
+          value: main
+        - name: deleteExisting
+          value: "true"
+      workspaces:
+        - name: output
+          workspace: gitops-repo
+        - name: basic-auth
+          workspace: git-credentials
+
+    # ─────────────────────────────────────────────────────────────
+    # Task 3: Build (depends on clone-source)
+    # ─────────────────────────────────────────────────────────────
+    - name: build
+      runAfter:
+        - clone-source
+      taskRef:
+        kind: Task
+        name: build
+      params:
+        - name: image
+          value: "$(params.image):$(params.revision)"
+        - name: dockerfile
+          value: $(params.dockerfile)
+        - name: context
+          value: $(params.context)
+        - name: registry-secret
+          value: $(params.registry-secret)
+      workspaces:
+        - name: source
+          workspace: shared-source
+        - name: attestations
+          workspace: attestations
+      timeout: "30m"
+
+    # ─────────────────────────────────────────────────────────────
+    # Task 4: Test (parallel with build — uses same source)
+    # ─────────────────────────────────────────────────────────────
+    - name: test
+      runAfter:
+        - clone-source
+      taskRef:
+        kind: Task
+        name: test
+      params:
+        - name: coverage-threshold
+          value: $(params.coverage-threshold)
+      workspaces:
+        - name: source
+          workspace: shared-source
+        - name: results
+          workspace: test-results
+      timeout: "20m"
+
+    # ─────────────────────────────────────────────────────────────
+    # Task 5: Deploy to Staging (depends on build + test passing)
+    # ─────────────────────────────────────────────────────────────
+    - name: deploy-staging
+      runAfter:
+        - build
+        - test
+        - clone-gitops
+      taskRef:
+        kind: Task
+        name: deploy
+      params:
+        - name: image
+          value: "$(tasks.build.results.image-url)"
+        - name: environment
+          value: staging
+        - name: argocd-server
+          value: $(params.argocd-server)
+        - name: argocd-app-name
+          value: $(params.argocd-staging-app)
+        - name: smoke-test-url
+          value: $(params.staging-smoke-url)
+        - name: argocd-token-secret
+          value: $(params.argocd-token-secret)
+      workspaces:
+        - name: source
+          workspace: shared-source
+        - name: gitops-repo
+          workspace: gitops-repo
+      timeout: "15m"
+
+    # ─────────────────────────────────────────────────────────────
+    # Task 6: Deploy to Prod (manual gate enforced via When expression)
+    # Set skip-prod-deploy=true for feature branches to skip this step.
+    # For true manual gate, use ArgoCD sync policy automated:false.
+    # ─────────────────────────────────────────────────────────────
+    - name: deploy-prod
+      runAfter:
+        - deploy-staging
+      when:
+        - input: "$(params.skip-prod-deploy)"
+          operator: in
+          values:
+            - "false"
+      taskRef:
+        kind: Task
+        name: deploy
+      params:
+        - name: image
+          value: "$(tasks.build.results.image-url)"
+        - name: environment
+          value: prod
+        - name: argocd-server
+          value: $(params.argocd-server)
+        - name: argocd-app-name
+          value: $(params.argocd-prod-app)
+        - name: smoke-test-url
+          value: $(params.prod-smoke-url)
+        - name: argocd-token-secret
+          value: $(params.argocd-token-secret)
+      workspaces:
+        - name: source
+          workspace: shared-source
+        - name: gitops-repo
+          workspace: gitops-repo
+      timeout: "20m"
+
+  # ─────────────────────────────────────────────────────────────
+  # Finally: Write audit log entry regardless of success/failure
+  # ─────────────────────────────────────────────────────────────
+  finally:
+    - name: audit-log
+      taskSpec:
+        params:
+          - name: pipeline-status
+            value: "$(tasks.status)"
+          - name: image-digest
+            value: "$(tasks.build.results.image-digest)"
+          - name: test-result
+            value: "$(tasks.test.results.test-result)"
+          - name: coverage-percent
+            value: "$(tasks.test.results.coverage-percent)"
+        steps:
+          - name: write-audit-event
+            image: curlimages/curl:8.6.0
+            script: |
+              #!/bin/sh
+              # Write audit event to the platform audit log (ADR-050)
+              AUDIT_LOG_URL="${AUDIT_LOG_ENDPOINT:-http://audit-log-service.sociosphere.svc.cluster.local:8080/events}"
+
+              curl -s -X POST "${AUDIT_LOG_URL}" \
+                -H "Content-Type: application/json" \
+                -d "{
+                  \"actor\": {
+                    \"service_account\": \"${TEKTON_SA:-tekton-build-sa}\"
+                  },
+                  \"action\": \"pipeline.complete\",
+                  \"resource\": {
+                    \"repo\": \"$(params.repo-url)\",
+                    \"ref\": \"$(params.revision)\"
+                  },
+                  \"status\": \"$(tasks.status)\",
+                  \"details\": \"{\\\"image_digest\\\":\\\"$(tasks.build.results.image-digest)\\\",\\\"coverage\\\":\\\"$(tasks.test.results.coverage-percent)%\\\",\\\"pipeline_run\\\":\\\"$(context.pipelineRun.name)\\\"}\",
+                  \"adr_reference\": \"ADR-040\",
+                  \"trace_id\": \"$(context.pipelineRun.uid)\"
+                }" || echo "Warning: audit log write failed"
+      params:
+        - name: pipeline-status
+          value: "$(tasks.status)"
+        - name: image-digest
+          value: "$(tasks.build.results.image-digest)"
+        - name: test-result
+          value: "$(tasks.test.results.test-result)"
+        - name: coverage-percent
+          value: "$(tasks.test.results.coverage-percent)"

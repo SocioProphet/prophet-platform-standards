@@ -1,0 +1,117 @@
+# Kyverno Policy: FIPS Validation
+# Implements ADR-050 (DevSecOps, RBAC, and Audit Standards)
+#
+# Container images must pass FIPS-140 compliance validation.
+# This policy verifies that images have a FIPS compliance attestation
+# stored alongside the image in the registry.
+#
+# Enforcement mode: Enforce
+# Failure behavior: Reject pod admission
+#
+# ADR References: ADR-050
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-fips-validation
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    kyverno.io/category: compliance
+  annotations:
+    policies.kyverno.io/title: Require FIPS-140 Validated Images
+    policies.kyverno.io/category: Compliance
+    policies.kyverno.io/severity: critical
+    policies.kyverno.io/subject: Pod, Container
+    adr.sociosphere.io/reference: "ADR-050"
+    policies.kyverno.io/description: |
+      All container images must have a FIPS-140 compliance attestation.
+      This attestation is generated during the Tekton build pipeline
+      (task-build.yaml) and stored as an OCI artifact alongside the image.
+      Images without a valid FIPS attestation are rejected at admission.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: verify-fips-attestation
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sociosphere
+      exclude:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - tekton-pipelines
+                - cert-manager
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/sociosphere/*"
+            - "ghcr.io/SocioProphet/*"
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    subject: "https://github.com/SocioProphet/*/.github/workflows/*.yaml@refs/heads/main"
+                    issuer: "https://token.actions.githubusercontent.com"
+          # Verify FIPS compliance attestation predicate
+          attestations:
+            - predicateType: https://sociosphere.io/fips-compliance/v1
+              conditions:
+                - all:
+                    - key: "{{ fips_validated }}"
+                      operator: Equals
+                      value: "true"
+                    - key: "{{ fips_level }}"
+                      operator: Equals
+                      value: "2"
+
+    # Validate that image is not using a known non-FIPS base image
+    - name: deny-non-fips-base-images
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - sociosphere
+      exclude:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - tekton-pipelines
+      validate:
+        message: |
+          Container image must not use a known non-FIPS base image.
+          Approved FIPS base images: ubi8-minimal, ubi9-minimal, rhel8-ubi.
+          See ADR-050 for approved base image list.
+        pattern:
+          spec:
+            containers:
+              - image: "?*"
+                =(name): "?*"
+        deny:
+          conditions:
+            any:
+              # Reject Alpine as base (not FIPS-validated)
+              - key: "{{ request.object.spec.containers[].image | contains(@, 'alpine') }}"
+                operator: Equals
+                value: true
+              # Reject plain Debian slim (not FIPS-validated)
+              - key: "{{ request.object.spec.containers[].image | contains(@, 'debian:slim') }}"
+                operator: Equals
+                value: true

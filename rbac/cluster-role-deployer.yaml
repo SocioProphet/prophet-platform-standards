@@ -1,0 +1,111 @@
+# ClusterRole: Deployer
+# Implements ADR-050 (DevSecOps, RBAC, and Audit Standards)
+#
+# Persona: Deployer — CI/CD systems and release engineers
+# Scope: Deploy to staging/prod; approve promotions; trigger Tekton PipelineRuns
+# Used by: Tekton ServiceAccounts, release engineers
+#
+# ADR References: ADR-040, ADR-050
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prophet-deployer
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    rbac.sociosphere.io/persona: deployer
+  annotations:
+    adr.sociosphere.io/reference: "ADR-040,ADR-050"
+    adr.sociosphere.io/persona: "deployer"
+    adr.sociosphere.io/description: |
+      Deploy access for CI/CD service accounts and release engineers.
+      Allows triggering Tekton PipelineRuns, managing deployments,
+      and initiating ArgoCD syncs. Cannot read Secrets.
+rules:
+  # Manage Tekton PipelineRuns (trigger and monitor pipelines)
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelineruns"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: ["tekton.dev"]
+    resources: ["taskruns"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelines", "tasks", "clustertasks"]
+    verbs: ["get", "list", "watch"]
+
+  # Read and manage deployments (for deploy and rollback)
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+
+  # ArgoCD application sync (trigger sync, view status)
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applicationsets"]
+    verbs: ["get", "list", "watch"]
+
+  # Read pods and logs (monitor deployment)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list"]
+
+  # Manage ConfigMaps (for deployment configuration)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+  # Manage services (for blue-green / canary deployments)
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+
+  # Read events
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+
+  # Read namespaces
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+
+  # Read HPA (for scaling visibility during deploy)
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+
+  # Manage ingresses (for traffic routing during deploy)
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prophet-deployer-binding
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    rbac.sociosphere.io/persona: deployer
+  annotations:
+    adr.sociosphere.io/reference: "ADR-040,ADR-050"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prophet-deployer
+subjects:
+  # Tekton build ServiceAccount
+  - kind: ServiceAccount
+    name: tekton-build-sa
+    namespace: sociosphere
+  # Release engineers group
+  # - kind: Group
+  #   name: <ORG_NAME>:deployers
+  #   apiGroup: rbac.authorization.k8s.io

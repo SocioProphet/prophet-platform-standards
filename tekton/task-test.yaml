@@ -1,0 +1,238 @@
+# Tekton Task: Test
+# Implements ADR-040 (Tekton + ArgoCD + GitOps)
+#
+# Responsibilities:
+#   1. Run unit tests
+#   2. Run integration tests
+#   3. Generate coverage report
+#   4. Enforce coverage threshold (≥80%)
+#
+# Outputs:
+#   - test-result: pass/fail
+#   - coverage-percent: code coverage percentage
+#   - report-url: path to coverage report artifact
+#
+# ADR References: ADR-040
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: test
+  namespace: sociosphere
+  labels:
+    app.kubernetes.io/part-of: prophet-platform
+    app.kubernetes.io/component: pipeline
+  annotations:
+    adr.sociosphere.io/reference: "ADR-040"
+spec:
+  description: |
+    Run unit and integration tests with coverage enforcement.
+    Fails if coverage drops below the configured threshold (default: 80%).
+
+  params:
+    - name: language
+      type: string
+      default: "python"
+      description: "Language/runtime: python, node, go, java"
+    - name: test-command
+      type: string
+      default: ""
+      description: "Override test command (empty = language default)"
+    - name: integration-test-command
+      type: string
+      default: ""
+      description: "Override integration test command (empty = skip)"
+    - name: coverage-threshold
+      type: string
+      default: "80"
+      description: "Minimum required coverage percentage (0-100)"
+    - name: coverage-report-dir
+      type: string
+      default: "coverage"
+      description: "Directory to write coverage reports"
+
+  workspaces:
+    - name: source
+      description: "Checked-out source code"
+    - name: results
+      description: "Workspace for test result and coverage files"
+
+  results:
+    - name: test-result
+      description: "Overall test result: pass or fail"
+    - name: unit-test-count
+      description: "Number of unit tests run"
+    - name: coverage-percent
+      description: "Code coverage percentage (integer)"
+    - name: report-url
+      description: "Path to coverage HTML report"
+
+  stepTemplate:
+    workingDir: $(workspaces.source.path)
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+          - ALL
+
+  steps:
+    # Step 1: Install dependencies
+    - name: install-deps
+      image: python:3.12-slim
+      script: |
+        #!/bin/bash
+        set -e
+        LANG="$(params.language)"
+
+        case "${LANG}" in
+          python)
+            if [ -f "requirements-test.txt" ]; then
+              pip install --no-cache-dir -r requirements-test.txt
+            elif [ -f "requirements.txt" ]; then
+              pip install --no-cache-dir -r requirements.txt
+            fi
+            pip install --no-cache-dir pytest pytest-cov coverage
+            ;;
+          node)
+            npm ci --include=dev
+            ;;
+          go)
+            echo "Go modules will be fetched during test run"
+            ;;
+          *)
+            echo "Language '${LANG}' — dependency install skipped"
+            ;;
+        esac
+
+    # Step 2: Run unit tests with coverage
+    - name: unit-tests
+      image: python:3.12-slim
+      script: |
+        #!/bin/bash
+        set -e
+        LANG="$(params.language)"
+        THRESHOLD="$(params.coverage-threshold)"
+        REPORT_DIR="$(workspaces.results.path)/$(params.coverage-report-dir)"
+        mkdir -p "${REPORT_DIR}"
+
+        # Determine test command
+        if [ -n "$(params.test-command)" ]; then
+          TEST_CMD="$(params.test-command)"
+        else
+          case "${LANG}" in
+            python)
+              TEST_CMD="python -m pytest tests/unit/ \
+                --cov=. \
+                --cov-report=xml:${REPORT_DIR}/coverage.xml \
+                --cov-report=html:${REPORT_DIR}/html \
+                --cov-report=term-missing \
+                --junitxml=${REPORT_DIR}/junit.xml \
+                -v"
+              ;;
+            node)
+              TEST_CMD="npx jest --coverage --coverageDirectory=${REPORT_DIR} --ci"
+              ;;
+            go)
+              TEST_CMD="go test ./... -coverprofile=${REPORT_DIR}/coverage.out -v 2>&1 | tee ${REPORT_DIR}/test.log"
+              ;;
+            *)
+              echo "No default test command for language '${LANG}'. Set test-command param."
+              exit 1
+              ;;
+          esac
+        fi
+
+        echo "Running: ${TEST_CMD}"
+        eval "${TEST_CMD}" 2>&1 | tee "${REPORT_DIR}/test-output.txt"
+        TEST_EXIT=${PIPESTATUS[0]}
+
+        # Count tests (Python/pytest)
+        if [ "${LANG}" = "python" ] && command -v python3 &> /dev/null; then
+          COUNT=$(python3 -c "
+        import xml.etree.ElementTree as ET
+        try:
+          tree = ET.parse('${REPORT_DIR}/junit.xml')
+          root = tree.getroot()
+          ts = root.find('testsuite') or root
+          print(ts.get('tests', '0'))
+        except:
+          print('0')
+        ")
+          echo -n "${COUNT}" > $(results.unit-test-count.path)
+        else
+          echo -n "0" > $(results.unit-test-count.path)
+        fi
+
+        if [ "${TEST_EXIT}" -ne 0 ]; then
+          echo -n "fail" > $(results.test-result.path)
+          echo "Unit tests FAILED"
+          exit 1
+        fi
+
+        echo "Unit tests PASSED"
+
+    # Step 3: Check coverage threshold
+    - name: check-coverage
+      image: python:3.12-slim
+      script: |
+        #!/bin/bash
+        set -e
+        THRESHOLD="$(params.coverage-threshold)"
+        REPORT_DIR="$(workspaces.results.path)/$(params.coverage-report-dir)"
+        LANG="$(params.language)"
+
+        # Extract coverage percentage
+        COVERAGE=0
+        if [ "${LANG}" = "python" ] && [ -f "${REPORT_DIR}/coverage.xml" ]; then
+          COVERAGE=$(python3 -c "
+        import xml.etree.ElementTree as ET
+        try:
+          tree = ET.parse('${REPORT_DIR}/coverage.xml')
+          root = tree.getroot()
+          rate = float(root.get('line-rate', '0')) * 100
+          print(int(rate))
+        except:
+          print(0)
+        ")
+        elif [ "${LANG}" = "go" ] && [ -f "${REPORT_DIR}/coverage.out" ]; then
+          COVERAGE=$(go tool cover -func=${REPORT_DIR}/coverage.out | tail -1 | awk '{print int($3)}')
+        fi
+
+        echo -n "${COVERAGE}" > $(results.coverage-percent.path)
+        echo -n "${REPORT_DIR}/html/index.html" > $(results.report-url.path)
+        echo "Coverage: ${COVERAGE}% (threshold: ${THRESHOLD}%)"
+
+        if [ "${COVERAGE}" -lt "${THRESHOLD}" ]; then
+          echo "COVERAGE CHECK FAILED: ${COVERAGE}% < ${THRESHOLD}%"
+          echo -n "fail" > $(results.test-result.path)
+          exit 1
+        fi
+
+        echo "Coverage check PASSED: ${COVERAGE}% >= ${THRESHOLD}%"
+
+    # Step 4: Run integration tests (optional)
+    - name: integration-tests
+      image: python:3.12-slim
+      script: |
+        #!/bin/bash
+        set -e
+
+        INT_CMD="$(params.integration-test-command)"
+        if [ -z "${INT_CMD}" ]; then
+          # Try default integration test location
+          if [ -d "tests/integration" ]; then
+            INT_CMD="python -m pytest tests/integration/ -v --junitxml=$(workspaces.results.path)/$(params.coverage-report-dir)/integration-junit.xml"
+          else
+            echo "No integration tests defined — skipping"
+            echo -n "pass" > $(results.test-result.path)
+            exit 0
+          fi
+        fi
+
+        echo "Running integration tests: ${INT_CMD}"
+        eval "${INT_CMD}"
+        echo -n "pass" > $(results.test-result.path)
+        echo "Integration tests PASSED"
