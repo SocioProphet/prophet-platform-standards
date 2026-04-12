@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://socioprophet/schemas/forensic-genesis/topics/edge.forensic.seal.completed.v1.schema.json",
+  "title": "edge.forensic.seal.completed.v1",
+  "type": "object",
+  "required": [
+    "tenant_id", "host_id", "artifact_id", "volume_uuid", "observed_at",
+    "seal_method", "sealed_root_hash", "sealed_manifest_sha256"
+  ],
+  "properties": {
+    "event_type": {"const": "seal_completed"},
+    "tenant_id": {"type": "string"},
+    "host_id": {"type": "string"},
+    "artifact_id": {"type": "string"},
+    "volume_uuid": {"type": "string"},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "seal_method": {"type": "string"},
+    "sealed_root_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "sealed_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "storage_uri_or_path": {"type": "string"}
+  },
+  "additionalProperties": true
+}
