@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://socioprophet/schemas/forensic-genesis/topics/edge.forensic.verify.completed.v1.schema.json",
+  "title": "edge.forensic.verify.completed.v1",
+  "type": "object",
+  "required": [
+    "tenant_id", "host_id", "verify_run_id", "observed_at", "secure_boot_state", "tpm_pcrs", "outbox_summary"
+  ],
+  "properties": {
+    "event_type": {"const": "verify_completed"},
+    "tenant_id": {"type": "string"},
+    "host_id": {"type": "string"},
+    "verify_run_id": {"type": "string"},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "secure_boot_state": {"type": "string"},
+    "tpm_pcrs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["bank", "index", "value"],
+        "properties": {
+          "bank": {"type": "string"},
+          "index": {"type": "integer", "minimum": 0},
+          "value": {"type": "string"}
+        }
+      }
+    },
+    "outbox_summary": {
+      "type": "object",
+      "required": ["file_count"],
+      "properties": {
+        "file_count": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string"}
+      }
+    }
+  },
+  "additionalProperties": true
+}
