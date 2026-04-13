@@ -1,0 +1,17 @@
+version: 1
+mode: json-schema
+policy:
+  default: BACKWARD_TRANSITIVE
+  additive_optional_fields: allowed
+  removing_required_fields: forbidden
+  adding_required_fields: forbidden
+  narrowing_types: forbidden
+  broadening_enum_with_review: allowed
+review:
+  requires:
+    - standards-owner-review
+    - runtime-consumer-review
+    - compatibility-test-artifact
+examples:
+  compatible_example: schemas/forensic-genesis/topics/evolution/edge.forensic.snmp.observed.v1.compatible.schema.json
+  incompatible_example: schemas/forensic-genesis/topics/evolution/edge.forensic.snmp.observed.v1.incompatible.schema.json
