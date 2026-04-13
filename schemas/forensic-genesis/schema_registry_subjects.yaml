@@ -1,0 +1,20 @@
+version: 1
+strategy: TopicNameStrategy
+compatibility_default: BACKWARD_TRANSITIVE
+subjects:
+  - topic: edge.forensic.snmp.observed.v1
+    value_subject: edge.forensic.snmp.observed.v1-value
+    key_subject: null
+    schema_path: schemas/forensic-genesis/topics/edge.forensic.snmp.observed.v1.schema.json
+  - topic: edge.forensic.mounts.observed.v1
+    value_subject: edge.forensic.mounts.observed.v1-value
+    key_subject: null
+    schema_path: schemas/forensic-genesis/topics/edge.forensic.mounts.observed.v1.schema.json
+  - topic: edge.forensic.verify.completed.v1
+    value_subject: edge.forensic.verify.completed.v1-value
+    key_subject: null
+    schema_path: schemas/forensic-genesis/topics/edge.forensic.verify.completed.v1.schema.json
+  - topic: edge.forensic.seal.completed.v1
+    value_subject: edge.forensic.seal.completed.v1-value
+    key_subject: null
+    schema_path: schemas/forensic-genesis/topics/edge.forensic.seal.completed.v1.schema.json
