@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://socioprophet/schemas/forensic-genesis/topics/evolution/edge.forensic.snmp.observed.v1.compatible.schema.json",
+  "title": "edge.forensic.snmp.observed.v1.compatible",
+  "type": "object",
+  "required": [
+    "tenant_id", "host_id", "capture_id", "observation_type", "observed_at",
+    "payload_digest", "local_artifact_path", "image_digest", "lockfile_digest",
+    "claim_class", "failure_modes", "snmp"
+  ],
+  "properties": {
+    "tenant_id": {"type": "string"},
+    "host_id": {"type": "string"},
+    "capture_id": {"type": "string"},
+    "observation_type": {"const": "snmp"},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "payload_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "local_artifact_path": {"type": "string"},
+    "image_digest": {"type": "string"},
+    "lockfile_digest": {"type": "string"},
+    "claim_class": {"const": "structural_fact"},
+    "failure_modes": {"type": "array", "items": {"type": "string"}},
+    "producer_version": {"type": "string"},
+    "snmp": {
+      "type": "object",
+      "required": ["agent_address", "agent_port", "oid", "version", "value_type"],
+      "properties": {
+        "agent_address": {"type": "string"},
+        "agent_port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "oid": {"type": "string"},
+        "version": {"type": "string"},
+        "value_type": {"type": "string"},
+        "value": {}
+      }
+    }
+  },
+  "additionalProperties": true
+}
