@@ -1,0 +1,28 @@
+[Unit]
+Description=Socios Model Gateway (floating optional service)
+After=network-online.target socios-render-config.service
+Wants=network-online.target
+Requires=socios-render-config.service
+
+[Container]
+ContainerName=socios-model-gateway
+Image=ghcr.io/socioprophet/socios-model-gateway:stable
+Exec=/usr/local/bin/socios-model-gateway serve
+Network=host
+ReadOnly=true
+NoNewPrivileges=true
+User=65532
+Group=65532
+EnvironmentFile=/run/socios/rendered/model-gateway.env
+Volume=/var/lib/socios/models:/var/lib/socios/models:Z,rw
+Volume=/var/cache/socios/model-downloads:/var/cache/socios/model-downloads:Z,rw
+Volume=/run/socios/rendered:/run/socios/rendered:ro
+AutoUpdate=registry
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target
