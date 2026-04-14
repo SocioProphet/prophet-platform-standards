@@ -1,0 +1,25 @@
+apiVersion: standards.socioprophet.io/v1alpha1
+kind: SociosNodeStateSchema
+metadata:
+  name: socios-node-state
+  version: v0.1
+spec:
+  compatibility:
+    minimumReadableWriterGenerationDelta: 1
+    policy: readers-should-support-N-and-N-1
+  roots:
+    - name: desired-state
+      type: durable-truth
+      schema: desired-state.v1
+    - name: evidence
+      type: append-only-journal
+      schema: evidence-journal.v1
+    - name: checkpoints
+      type: replay-checkpoint
+      schema: checkpoint.v1
+    - name: models
+      type: model-artifacts
+      schema: model-cache.v1
+  prohibited:
+    - etc-socios-as-operational-database
+    - usr-as-mutable-program-tree
