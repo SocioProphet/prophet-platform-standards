@@ -1,0 +1,26 @@
+[Unit]
+Description=Socios Agent Plane (critical bound service)
+After=network-online.target socios-render-config.service
+Wants=network-online.target
+Requires=socios-render-config.service
+
+[Container]
+ContainerName=socios-agentplane
+Image=ghcr.io/socioprophet/socios-agentplane:replace-with-digest
+Exec=/usr/local/bin/socios-agentplane serve
+Network=host
+ReadOnly=true
+NoNewPrivileges=true
+User=65532
+Group=65532
+EnvironmentFile=/run/socios/rendered/agentplane.env
+Volume=/var/lib/socios:/var/lib/socios:Z,rw
+Volume=/run/socios/rendered:/run/socios/rendered:ro
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
