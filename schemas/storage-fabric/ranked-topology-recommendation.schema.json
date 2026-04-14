@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://socioprophet.dev/schemas/storage-fabric/ranked-topology-recommendation.schema.json",
+  "title": "RankedTopologyRecommendation",
+  "type": "object",
+  "required": ["profile", "roles"],
+  "properties": {
+    "profile": {
+      "type": "string",
+      "description": "Workload profile identifier."
+    },
+    "roles": {
+      "type": "object",
+      "description": "Per-role ranked recommendations.",
+      "additionalProperties": {
+        "$ref": "#/$defs/roleRecommendation"
+      }
+    }
+  },
+  "$defs": {
+    "roleRecommendation": {
+      "type": "object",
+      "required": ["selected", "candidates"],
+      "properties": {
+        "selected": {
+          "type": "string"
+        },
+        "historySummary": {
+          "$ref": "#/$defs/historySummary"
+        },
+        "candidates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/candidate"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["name", "score", "scoreBreakdown", "evidenceStatus"],
+      "properties": {
+        "name": {"type": "string"},
+        "score": {"type": "number"},
+        "evidenceStatus": {"type": "string"},
+        "scoreBreakdown": {
+          "type": "object",
+          "required": ["workloadFit", "evidence", "operability"],
+          "properties": {
+            "workloadFit": {"type": "number"},
+            "evidence": {"type": "number"},
+            "operability": {"type": "number"}
+          },
+          "additionalProperties": false
+        },
+        "historySummary": {
+          "$ref": "#/$defs/historySummary"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "historySummary": {
+      "type": "object",
+      "properties": {
+        "selectedTrend": {"type": "string"},
+        "selectedScoreDelta": {"type": "number"},
+        "selectionChanged": {"type": "boolean"},
+        "baselineSelected": {"type": "string"},
+        "currentSelected": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
