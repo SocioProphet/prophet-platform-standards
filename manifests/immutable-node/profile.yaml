@@ -1,0 +1,24 @@
+apiVersion: standards.socioprophet.io/v1alpha1
+kind: SociosImmutableNodeProfile
+metadata:
+  name: socios-immutable-node
+  version: v0.1
+spec:
+  hostModel:
+    strategy: bootc-first
+    compatibility: ostree-compatible
+    upgradeMode: staged
+    rollbackSupport: true
+  hostServices:
+    - socios-render-config.service
+    - socios-bpf-loader.service
+    - socios-supervisor.service
+  serviceWorkloads:
+    - socios-agentplane.container
+    - socios-evidence.container
+    - socios-model-gateway.container
+  stateRoots:
+    - desired-state
+    - evidence
+    - checkpoints
+    - models
