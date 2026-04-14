@@ -1,0 +1,24 @@
+[Unit]
+Description=Socios Runtime Config Renderer
+After=local-fs.target
+Before=socios-supervisor.service
+ConditionPathExists=/usr/libexec/socios/render-config
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/socios/render-config --desired-state /var/lib/socios/desired-state --config-root /etc/socios --output /run/socios/rendered
+RemainAfterExit=true
+StateDirectory=socios
+RuntimeDirectory=socios
+RuntimeDirectoryMode=0750
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ReadWritePaths=/run/socios/rendered /var/lib/socios/desired-state
+
+[Install]
+WantedBy=multi-user.target

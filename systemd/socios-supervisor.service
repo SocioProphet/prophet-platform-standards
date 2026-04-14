@@ -1,0 +1,31 @@
+[Unit]
+Description=Socios Host Supervisor
+Documentation=docs/HOST_CAPABILITY_MODEL.md docs/IMMUTABLE_NODE_GUIDE.md
+After=local-fs.target network-online.target socios-render-config.service
+Wants=network-online.target
+Requires=socios-render-config.service
+ConditionPathExists=/usr/libexec/socios/supervisor
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/socios/supervisor --config /run/socios/rendered/supervisor.yaml
+Restart=always
+RestartSec=5
+StateDirectory=socios
+CacheDirectory=socios
+RuntimeDirectory=socios
+RuntimeDirectoryMode=0750
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

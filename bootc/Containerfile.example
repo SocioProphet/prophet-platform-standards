@@ -1,0 +1,35 @@
+FROM quay.io/fedora/fedora-bootc:latest
+
+# Example only: replace package choices, helper binaries, and image source as the
+# actual immutable-node substrate is formalized.
+
+RUN dnf -y install \
+      podman \
+      nftables \
+      audit \
+      systemd-container \
+    && dnf clean all
+
+# Host helper binaries and static assets
+COPY systemd/ /usr/lib/systemd/system/
+COPY quadlet/ /usr/share/containers/systemd/
+COPY tmpfiles/ /usr/lib/tmpfiles.d/
+COPY nftables/ /usr/lib/socios/nftables/
+COPY audit/ /usr/lib/socios/audit/
+COPY manifests/ /usr/lib/socios/manifests/
+
+# Example host helper locations; replace with real binaries or packages.
+COPY bin/socios-supervisor /usr/libexec/socios/supervisor
+COPY bin/socios-render-config /usr/libexec/socios/render-config
+COPY bin/socios-bpf-loader /usr/libexec/socios/bpf-loader
+COPY bpf/ /usr/lib/socios/bpf/
+
+RUN chmod 0755 /usr/libexec/socios/supervisor \
+    /usr/libexec/socios/render-config \
+    /usr/libexec/socios/bpf-loader
+
+# Example bound-image metadata location. Replace image references and pin by digest.
+RUN mkdir -p /usr/lib/bootc/bound-images.d
+COPY bound-images/ /usr/lib/bootc/bound-images.d/
+
+# The real build should also enable the desired units or ship preset policy.

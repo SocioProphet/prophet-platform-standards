@@ -1,0 +1,11 @@
+# Baseline Socios audit rules for immutable-node review and compliance.
+
+-w /etc/socios -p wa -k socios_config
+-w /etc/containers/systemd -p wa -k socios_quadlet_override
+-w /var/lib/socios/desired-state -p wa -k socios_desired_state
+-w /var/lib/socios/evidence -p wa -k socios_evidence
+-w /run/socios/rendered -p wa -k socios_runtime_rendered
+
+-a always,exit -F arch=b64 -S init_module,finit_module,delete_module -k kernel_module_change
+-a always,exit -F arch=b64 -S bpf -k socios_bpf_change
+-a always,exit -F arch=b64 -S sethostname,setdomainname -k host_identity_change

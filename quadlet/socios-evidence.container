@@ -1,0 +1,27 @@
+[Unit]
+Description=Socios Evidence Service (critical bound service)
+After=network-online.target socios-render-config.service
+Wants=network-online.target
+Requires=socios-render-config.service
+
+[Container]
+ContainerName=socios-evidence
+Image=ghcr.io/socioprophet/socios-evidence:replace-with-digest
+Exec=/usr/local/bin/socios-evidence serve
+Network=host
+ReadOnly=true
+NoNewPrivileges=true
+User=65532
+Group=65532
+EnvironmentFile=/run/socios/rendered/evidence.env
+Volume=/var/lib/socios/evidence:/var/lib/socios/evidence:Z,rw
+Volume=/var/lib/socios/checkpoints:/var/lib/socios/checkpoints:Z,rw
+Volume=/run/socios/rendered:/run/socios/rendered:ro
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

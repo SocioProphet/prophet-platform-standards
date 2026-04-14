@@ -1,0 +1,29 @@
+[Unit]
+Description=Socios BPF Loader
+After=local-fs.target socios-render-config.service
+Requires=socios-render-config.service
+ConditionPathExists=/usr/libexec/socios/bpf-loader
+ConditionPathExists=/usr/lib/socios/bpf
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/socios/bpf-loader --policy /run/socios/rendered/bpf-policy.yaml --objects /usr/lib/socios/bpf
+RemainAfterExit=true
+RuntimeDirectory=socios
+RuntimeDirectoryMode=0750
+AmbientCapabilities=CAP_BPF CAP_NET_ADMIN CAP_PERFMON CAP_SYS_RESOURCE
+CapabilityBoundingSet=CAP_BPF CAP_NET_ADMIN CAP_PERFMON CAP_SYS_RESOURCE
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+ReadOnlyPaths=/usr/lib/socios/bpf /run/socios/rendered
+
+[Install]
+WantedBy=multi-user.target
