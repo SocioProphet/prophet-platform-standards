@@ -1,0 +1,16 @@
+{
+  "findingId": "finding-provider-binding-001",
+  "findingType": "ProviderBindingRecommendation",
+  "subjectBindingId": "binding-standard-app-env-public-cloud-001",
+  "recommendation": "Keep binding approved but require exit-plan test evidence before increasing portability tier.",
+  "riskLevel": "medium",
+  "rationale": "The binding is approved and blueprint-portable, but exit evidence has not yet been recorded.",
+  "requiredActions": [
+    "run exit-plan simulation",
+    "attach replay evidence",
+    "review portability tier"
+  ],
+  "evidenceRefs": [
+    "evidence.standard-environment.v1"
+  ]
+}
