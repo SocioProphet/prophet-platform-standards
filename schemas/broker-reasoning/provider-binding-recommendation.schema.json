@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "findingId": { "type": "string" },
+    "findingType": { "type": "string" },
+    "subjectBindingId": { "type": "string" },
+    "recommendation": { "type": "string" },
+    "riskLevel": { "type": "string" },
+    "rationale": { "type": "string" },
+    "requiredActions": { "type": "array", "items": { "type": "string" } },
+    "evidenceRefs": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["findingId", "findingType", "subjectBindingId", "recommendation", "riskLevel", "rationale"]
+}
