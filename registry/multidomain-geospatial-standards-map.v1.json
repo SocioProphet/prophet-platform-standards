@@ -1,0 +1,83 @@
+{
+  "registry_id": "socioprophet.multidomain-geospatial.standards-map.v1",
+  "version": "v1",
+  "status": "draft",
+  "updated_at": "2026-04-27",
+  "purpose": "Canonical cross-repository standards map for multi-domain geospatial intelligence across platform, storage, knowledge, and agent standards.",
+  "standards_authorities": [
+    {
+      "repo": "SocioProphet/prophet-platform-standards",
+      "authority": "platform_product_acceptance_deployment_observability_governance_alignment",
+      "primary_standard": "docs/standards/070-multidomain-geospatial-standards-alignment.md",
+      "validation_target": "make multidomain-geospatial-validate"
+    },
+    {
+      "repo": "SocioProphet/socioprophet-standards-storage",
+      "authority": "storage_event_stream_analytics_payload_benchmark_fips_retention_contracts",
+      "primary_standard": "docs/standards/096-multidomain-geospatial-storage-contracts.md",
+      "schema_paths": [
+        "schemas/jsonschema/multidomain/multidomain_geospatial_record.v1.schema.json"
+      ],
+      "fixture_paths": [
+        "fixtures/multidomain/vessel-track-observation.sample.v1.json"
+      ],
+      "validation_target": "make multidomain-geospatial-validate"
+    },
+    {
+      "repo": "SocioProphet/socioprophet-standards-knowledge",
+      "authority": "ontology_jsonld_meriotopographic_provenance_evidence_masking_semantics",
+      "primary_standard": "docs/standards/080-multidomain-geospatial-knowledge-context.md",
+      "schema_paths": [
+        "schemas/jsonschema/multidomain/multidomain_geospatial_knowledge_artifact.v1.schema.json"
+      ],
+      "fixture_paths": [
+        "fixtures/multidomain/space-asset-knowledge-artifact.sample.v1.json"
+      ],
+      "validation_target": "make multidomain-geospatial-validate"
+    },
+    {
+      "repo": "SocioProphet/socioprophet-agent-standards",
+      "authority": "agent_runtime_policy_approval_evidence_replay_lattice_admission",
+      "primary_standard": "docs/standards/020-multidomain-geospatial-agent-runtime.md",
+      "schema_paths": [
+        "schemas/jsonschema/multidomain/geospatial_agent_runtime_profile.v1.schema.json"
+      ],
+      "fixture_paths": [
+        "fixtures/multidomain/stac-ingest-runtime-profile.sample.v1.json"
+      ],
+      "validation_target": "make multidomain-geospatial-agent-validate"
+    }
+  ],
+  "domain_lanes": [
+    "geo-platform-parity",
+    "earth-observation",
+    "space-telemetry",
+    "maritime-domain-awareness",
+    "air-domain-awareness",
+    "defense-public-safety",
+    "smart-spaces-built-environment",
+    "sensor-fusion"
+  ],
+  "implementation_consumers": [
+    "SocioProphet/prophet-platform",
+    "SocioProphet/sociosphere",
+    "SocioProphet/sherlock-search",
+    "SocioProphet/agentplane",
+    "SocioProphet/lattice-forge",
+    "SocioProphet/gaia-world-model",
+    "SocioProphet/prophet-core-contracts",
+    "SocioProphet/prophet-core-ingest",
+    "SocioProphet/prophet-core-catalog",
+    "SocioProphet/prophet-core-query",
+    "SocioProphet/prophet-core-policy",
+    "SocioProphet/prophet-domain-gaia-ontology",
+    "SocioProphet/prophet-domain-gaia-curation-vault"
+  ],
+  "minimum_conformance": {
+    "standards_cross_reference_required": true,
+    "schema_fixture_validator_required_for_stable_contracts": true,
+    "sensitive_geo_policy_required_for_defense_public_safety": true,
+    "runtime_evidence_required_for_agent_execution": true,
+    "lattice_admission_requires_executable_entrypoint": true
+  }
+}
