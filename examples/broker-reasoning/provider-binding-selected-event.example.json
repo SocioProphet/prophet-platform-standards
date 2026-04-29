@@ -1,0 +1,15 @@
+{
+  "eventType": "broker.provider_binding.selected",
+  "eventId": "evt-provider-binding-selected-001",
+  "occurredAt": "2026-04-26T16:30:00Z",
+  "requestId": "req-standard-app-env-001",
+  "serviceClass": "environment",
+  "providerClass": "public-cloud",
+  "providerBindingId": "binding-standard-app-env-public-cloud-001",
+  "decisionId": "decision-standard-app-env-001",
+  "portabilityTier": "P2-blueprint-portable",
+  "rationale": "Selected approved public-cloud binding because the request matched standard environment requirements and required blueprint portability.",
+  "evidenceRefs": [
+    "evidence.standard-environment.v1"
+  ]
+}

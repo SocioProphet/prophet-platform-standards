@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "eventType": { "type": "string" },
+    "eventId": { "type": "string" },
+    "occurredAt": { "type": "string" },
+    "requestId": { "type": "string" },
+    "serviceClass": { "type": "string" },
+    "providerClass": { "type": "string" },
+    "providerBindingId": { "type": "string" },
+    "decisionId": { "type": "string" },
+    "portabilityTier": { "type": "string" },
+    "rationale": { "type": "string" },
+    "evidenceRefs": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["eventType", "eventId", "occurredAt", "requestId", "serviceClass", "providerClass", "providerBindingId", "decisionId", "portabilityTier", "rationale"]
+}
