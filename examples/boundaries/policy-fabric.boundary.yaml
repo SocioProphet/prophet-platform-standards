@@ -1,0 +1,95 @@
+schema_version: "0.1"
+repo: SocioProphet/policy-fabric
+jurisdiction: Admissibility policy for boundary crossings, proof artifact verdicts, trust-root assumptions, and claim-mode promotion.
+owned_artifacts:
+  - name: claim-mode-promotion-policy
+    description: Policy rules deciding whether a claim may move to a stronger evidence mode.
+    paths:
+      - policies/boundary/claim_mode_promotion.rego
+    claim_modes:
+      - formal_construction
+      - fixture_validated
+    sufficiency_types:
+      - governance_sufficient
+  - name: proof-artifact-verdict-policy
+    description: Policy rules interpreting PROVED, VIOLATION, and INCONCLUSIVE artifacts.
+    paths:
+      - policies/boundary/proof_artifact_verdicts.rego
+    claim_modes:
+      - formal_construction
+      - fixture_validated
+    sufficiency_types:
+      - governance_sufficient
+      - audit_sufficient
+non_goals:
+  - Does not generate proof artifacts; that belongs to prophet-platform.
+  - Does not own the estate atlas; that belongs to sociosphere.
+  - Does not compile ontologies into schemas; that belongs to ontogenesis.
+upstream_inputs:
+  - repo: SocioProphet/prophet-platform-standards
+    artifact: typed-boundary-standard
+    purpose: Normative vocabulary for claim modes, sufficiency types, and boundaries.
+    required_claim_mode: formal_construction
+    required_sufficiency: governance_sufficient
+  - repo: SocioProphet/prophet-platform
+    artifact: proof-artifact
+    purpose: Evaluate runtime/checker verdicts for admissibility.
+    required_claim_mode: fixture_validated
+    required_sufficiency: audit_sufficient
+downstream_outputs:
+  - repo: SocioProphet/sociosphere
+    artifact: boundary-admissibility-decision
+    purpose: Register admissible or blocked transitions in the estate atlas.
+    required_claim_mode: fixture_validated
+    required_sufficiency: governance_sufficient
+claim_modes:
+  - formal_construction
+  - illustrative_schema
+  - fixture_validated
+sufficiency_types:
+  - governance_sufficient
+  - audit_sufficient
+trust_roots:
+  - name: policy-bundle-signature
+    type: signature
+    assumption: Policy bundles are signed before use in claim promotion gates.
+  - name: standards-schema
+    type: schema
+    assumption: Boundary and evidence artifacts validate against approved schema versions.
+evidence_required:
+  - claim_mode: fixture_validated
+    required_artifacts:
+      - policy fixture input
+      - expected decision
+      - policy evaluation output
+    checker: policy-fabric fixture evaluator
+    downgrade_if_missing: INCONCLUSIVE
+allowed_crossings:
+  - repo: SocioProphet/prophet-platform
+    artifact: proof-artifact verdict
+    purpose: Decide promotion/admission from runtime evidence.
+    required_claim_mode: fixture_validated
+    required_sufficiency: audit_sufficient
+  - repo: SocioProphet/sociosphere
+    artifact: admissibility decision
+    purpose: Update boundary atlas transition status.
+    required_claim_mode: fixture_validated
+    required_sufficiency: governance_sufficient
+forbidden_crossings:
+  - Promoting claims when proof artifacts are INCONCLUSIVE.
+  - Treating dashboards or comments as proof artifacts.
+  - Accepting unpinned policy bundles for production gates.
+promotion_gates:
+  - from: formal_construction
+    to: fixture_validated
+    evidence:
+      - policy fixtures
+      - evaluation output
+    policy: self:boundary_policy_fixture_gate
+maturity:
+  level: L2
+  status: Example boundary record; admissibility issue open in policy-fabric.
+  next_step: Add native boundary.yaml and Rego/policy fixtures.
+contacts:
+  - governance
+notes: Example entry for standards validation and Sociosphere atlas bootstrap.
