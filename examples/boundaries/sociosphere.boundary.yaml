@@ -1,0 +1,101 @@
+schema_version: "0.1"
+repo: SocioProphet/sociosphere
+jurisdiction: Estate-level boundary atlas, work-order registry, repo jurisdiction map, and cross-boundary transition reporting.
+owned_artifacts:
+  - name: boundary-atlas
+    description: Registry mapping repos to jurisdictions, evidence contracts, sufficiency claims, and allowed crossings.
+    paths:
+      - catalog/boundaries.yaml
+      - docs/boundary-atlas-v0.1.md
+    claim_modes:
+      - formal_construction
+      - fixture_validated
+    sufficiency_types:
+      - governance_sufficient
+  - name: boundary-coverage-report
+    description: Report identifying missing boundary metadata, weak evidence contracts, and claim-mode gaps.
+    paths:
+      - docs/boundary-coverage-report.md
+    claim_modes:
+      - fixture_validated
+    sufficiency_types:
+      - governance_sufficient
+      - audit_sufficient
+non_goals:
+  - Does not define policy admissibility; that belongs to policy-fabric.
+  - Does not emit proof artifacts; that belongs to prophet-platform.
+  - Does not define the normative standard; that belongs to prophet-platform-standards.
+upstream_inputs:
+  - repo: SocioProphet/prophet-platform-standards
+    artifact: boundary.schema.json
+    purpose: Validate boundary records before atlas ingestion.
+    required_claim_mode: formal_construction
+    required_sufficiency: governance_sufficient
+  - repo: SocioProphet/policy-fabric
+    artifact: boundary-admissibility-decision
+    purpose: Record allowed, blocked, and inconclusive transitions.
+    required_claim_mode: fixture_validated
+    required_sufficiency: governance_sufficient
+  - repo: SocioProphet/prophet-platform
+    artifact: proof-artifact-verdict
+    purpose: Register runtime evidence verdicts and coverage status.
+    required_claim_mode: fixture_validated
+    required_sufficiency: audit_sufficient
+downstream_outputs:
+  - repo: SocioProphet/socioprophet
+    artifact: boundary-coverage-summary
+    purpose: Public/admin surface for estate readiness and demo claims.
+    required_claim_mode: fixture_validated
+    required_sufficiency: governance_sufficient
+claim_modes:
+  - formal_construction
+  - illustrative_schema
+  - fixture_validated
+  - experimental_run
+sufficiency_types:
+  - governance_sufficient
+  - audit_sufficient
+trust_roots:
+  - name: boundary-schema-version
+    type: schema
+    assumption: Boundary records are validated against approved schema versions.
+  - name: source-repo-record
+    type: hash
+    assumption: Ingested boundary files are pinned by repository commit or artifact hash.
+evidence_required:
+  - claim_mode: fixture_validated
+    required_artifacts:
+      - valid boundary records
+      - ingestion report
+      - coverage summary
+    checker: sociosphere boundary atlas validator
+    downgrade_if_missing: INCONCLUSIVE
+allowed_crossings:
+  - repo: SocioProphet/prophet-platform-standards
+    artifact: boundary schema
+    purpose: Validate atlas entries.
+    required_claim_mode: formal_construction
+    required_sufficiency: governance_sufficient
+  - repo: SocioProphet/policy-fabric
+    artifact: admissibility decision
+    purpose: Annotate atlas transitions.
+    required_claim_mode: fixture_validated
+    required_sufficiency: governance_sufficient
+forbidden_crossings:
+  - Registering a repo as production-ready without boundary metadata.
+  - Presenting missing evidence as PROVED.
+  - Treating repo ownership as semantic authority without declared jurisdiction.
+promotion_gates:
+  - from: illustrative_schema
+    to: fixture_validated
+    evidence:
+      - three valid boundary examples
+      - atlas ingestion report
+    policy: SocioProphet/policy-fabric:boundary_atlas_ingestion
+maturity:
+  level: L2
+  status: Example boundary record; Boundary Atlas v0.1 issue open in sociosphere.
+  next_step: Add native boundary atlas catalog and coverage report.
+contacts:
+  - registry
+notes: Example entry for standards validation and Sociosphere atlas bootstrap.
