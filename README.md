@@ -1,4 +1,4 @@
-# SocioProphet Platform Standards — DevSecOps, CI/CD, and Observability
+# SocioProphet Platform Standards — DevSecOps, CI/CD, Observability, and Typed Boundaries
 
 **Canonical standards for the SocioProphet platform.**
 
@@ -6,12 +6,37 @@ This repository defines:
 - **ADR-040:** Tekton + ArgoCD + GitOps strategy (SHOULD)
 - **ADR-050:** DevSecOps, RBAC, and Audit standards (MUST)
 - **ADR-060:** OTEL Observability and Telemetry (SHOULD)
+- **Typed Boundary Standard v0.1:** repo jurisdictions, claim modes, sufficiency types, evidence artifacts, and boundary-crossing contracts
 
 ## Quick Start
 1. Read `adr/ADR-040-tekton-argocd-gitops.md`
 2. Copy templates from `tekton/`, `argocd/`, `rbac/`
 3. Follow `docs/GETTING_STARTED.md`
-4. Reference implementation: [sociosphere](https://github.com/SocioProphet/sociosphere)
+4. For boundary-governed repos, start with `docs/typed-boundary-standard.md`, copy `templates/BOUNDARY.md`, and add `.socioprophet/boundary.yaml`
+5. Reference implementation: [sociosphere](https://github.com/SocioProphet/sociosphere)
+
+## Typed Boundary Standard
+
+The typed boundary standard defines how repos declare:
+
+- jurisdiction and explicit non-goals;
+- owned artifacts and downstream consumers;
+- claim modes and evidence requirements;
+- sufficiency types, including semantic, task, governance, audit, reconstruction, and microstate sufficiency;
+- trust roots and assumptions;
+- permitted and forbidden boundary crossings;
+- promotion gates for claim-mode advancement.
+
+Core files:
+
+- `docs/typed-boundary-standard.md`
+- `docs/claim-modes.md`
+- `docs/sufficiency-types.md`
+- `templates/BOUNDARY.md`
+- `schemas/boundary.schema.json`
+- `schemas/claim-mode.schema.json`
+- `schemas/evidence-artifact.schema.json`
+- `examples/boundaries/*.boundary.yaml`
 
 ## Repository Map
 
@@ -52,22 +77,32 @@ prophet-platform-standards/
 │   ├── dashboard-cost-tracking.json
 │   ├── dashboard-compliance.json
 │   └── dashboard-propagation-waterfall.json
-├── schemas/                      Avro schemas for audit logs
-│   └── audit-log-schema.avro
-├── docs/                         Implementation guides
+├── schemas/                      Schemas for audit logs, boundaries, claims, and evidence artifacts
+│   ├── audit-log-schema.avro
+│   ├── boundary.schema.json
+│   ├── claim-mode.schema.json
+│   └── evidence-artifact.schema.json
+├── docs/                         Implementation guides and standards
 │   ├── GETTING_STARTED.md
 │   ├── DEPLOYMENT_GUIDE.md
 │   ├── AUDIT_LOG_GUIDE.md
 │   ├── OTEL_INSTRUMENTATION_GUIDE.md
 │   ├── RBAC_GUIDE.md
-│   └── KYVERNO_GUIDE.md
+│   ├── KYVERNO_GUIDE.md
+│   ├── typed-boundary-standard.md
+│   ├── claim-modes.md
+│   └── sufficiency-types.md
+├── templates/                    Reusable governance templates
+│   └── BOUNDARY.md
+├── examples/                     Example standards records
+│   └── boundaries/*.boundary.yaml
 ├── GOVERNANCE.md
 ├── VERSIONING.md
 └── CONTRIBUTING.md
 ```
 
 ## Status
-**v1.0** — Validated by sociosphere reference implementation.
+**v1.0** — Validated by sociosphere reference implementation. Typed Boundary Standard v0.1 is a normative draft for boundary-governed repos.
 
 ## License
 Apache-2.0
