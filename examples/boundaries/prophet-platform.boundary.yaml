@@ -1,0 +1,97 @@
+schema_version: "0.1"
+repo: SocioProphet/prophet-platform
+jurisdiction: Runtime verification, run-bundle construction, proof artifact validation, and platform execution contracts.
+owned_artifacts:
+  - name: proof-artifact-schema
+    description: Schema for replayable proof artifacts emitted by platform checks.
+    paths:
+      - schemas/proof-artifact.schema.json
+    claim_modes:
+      - formal_construction
+      - illustrative_schema
+      - fixture_validated
+    sufficiency_types:
+      - audit_sufficient
+      - governance_sufficient
+  - name: event-ir-schema
+    description: Typed Event-IR contract for observed platform/security/runtime events.
+    paths:
+      - schemas/event-ir.schema.json
+    claim_modes:
+      - formal_construction
+      - fixture_validated
+    sufficiency_types:
+      - reconstruction_sufficient
+      - audit_sufficient
+non_goals:
+  - Does not define estate-wide policy semantics; those belong to policy-fabric.
+  - Does not own the boundary atlas; that belongs to sociosphere.
+  - Does not assert ground-truth security outside declared observation assumptions.
+upstream_inputs:
+  - repo: SocioProphet/prophet-platform-standards
+    artifact: typed-boundary-standard
+    purpose: Normative boundary and claim-mode vocabulary.
+    required_claim_mode: formal_construction
+    required_sufficiency: governance_sufficient
+  - repo: SocioProphet/policy-fabric
+    artifact: admissibility-policy-bundle
+    purpose: Decide whether proof artifact verdicts permit claim promotion.
+    required_claim_mode: fixture_validated
+    required_sufficiency: governance_sufficient
+downstream_outputs:
+  - repo: SocioProphet/sociosphere
+    artifact: proof-artifact-verdicts
+    purpose: Estate boundary atlas and coverage reporting.
+    required_claim_mode: fixture_validated
+    required_sufficiency: audit_sufficient
+claim_modes:
+  - formal_construction
+  - illustrative_schema
+  - fixture_validated
+  - experimental_run
+sufficiency_types:
+  - reconstruction_sufficient
+  - governance_sufficient
+  - audit_sufficient
+trust_roots:
+  - name: policy-bundle-hash
+    type: policy_bundle
+    assumption: Policy bundles are hash-pinned and signature checked before verdict acceptance.
+  - name: inputs-hash
+    type: hash
+    assumption: Event windows and configs are canonicalized before hashing.
+  - name: checker-version
+    type: runtime
+    assumption: Checker version is pinned in each artifact and allowlisted by policy.
+evidence_required:
+  - claim_mode: fixture_validated
+    required_artifacts:
+      - fixture event window
+      - proof artifact
+      - checker output
+    checker: prophet-platform proof-artifact checker
+    downgrade_if_missing: INCONCLUSIVE
+allowed_crossings:
+  - repo: SocioProphet/policy-fabric
+    artifact: proof-artifact verdict
+    purpose: Claim-mode promotion decision.
+    required_claim_mode: fixture_validated
+    required_sufficiency: audit_sufficient
+forbidden_crossings:
+  - Treating unsigned logs as proof of safety.
+  - Promoting INCONCLUSIVE artifacts to safety claims.
+  - Consuming policy definitions without a pinned bundle hash.
+promotion_gates:
+  - from: illustrative_schema
+    to: fixture_validated
+    evidence:
+      - schema-valid fixture artifact
+      - deterministic checker output
+    policy: SocioProphet/policy-fabric:claim_mode_promotion
+maturity:
+  level: L2
+  status: Example boundary record; implementation issue open in prophet-platform.
+  next_step: Add native boundary.yaml and proof artifact schemas in prophet-platform.
+contacts:
+  - architecture
+notes: Example entry for standards validation and Sociosphere atlas bootstrap.
