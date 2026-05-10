@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.socioprophet.ai/prophet-platform-standards/evidence-artifact.schema.json",
+  "title": "SocioProphet Evidence Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_id",
+    "producer_boundary",
+    "claim",
+    "assumptions",
+    "inputs_hash",
+    "result",
+    "sufficiency_type"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^0\\.[0-9]+$" },
+    "artifact_id": { "type": "string", "minLength": 4 },
+    "producer_boundary": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+    "claim": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["kind", "params"],
+      "properties": {
+        "kind": { "type": "string" },
+        "params": { "type": "object" }
+      }
+    },
+    "assumptions": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "coverage": { "type": "array", "items": { "type": "string" } },
+        "event_integrity": { "type": "string" },
+        "scope_integrity": { "type": "string" },
+        "clock_model": { "type": "string" },
+        "missing_evidence": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "inputs_hash": { "type": "string" },
+    "policy_bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hash": { "type": "string" },
+        "sig": { "type": "string" },
+        "uri": { "type": "string" }
+      }
+    },
+    "checker": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "version": { "type": "string" },
+        "hash": { "type": "string" }
+      }
+    },
+    "result": { "type": "string", "enum": ["PROVED", "VIOLATION", "INCONCLUSIVE"] },
+    "claim_mode_supported": {
+      "type": "string",
+      "enum": [
+        "formal_construction",
+        "illustrative_schema",
+        "fixture_validated",
+        "experimental_run",
+        "independently_reproduced",
+        "audited_run"
+      ]
+    },
+    "sufficiency_type": {
+      "type": "string",
+      "enum": [
+        "microstate_sufficient",
+        "reconstruction_sufficient",
+        "semantic_sufficient",
+        "task_sufficient",
+        "governance_sufficient",
+        "audit_sufficient",
+        "not_sufficient"
+      ]
+    },
+    "precision": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "mode": { "type": "string", "enum": ["Exact", "Approx"] },
+        "delta": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "witness_or_counterexample": { "type": "object" },
+    "signature": { "type": "string" },
+    "notes": { "type": "string" }
+  }
+}
