@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://standards.socioprophet.org/schemas/architecture/srga-envelope.schema.json",
+  "title": "SocioProphet Representational Governance Architecture Envelope",
+  "description": "Governance, provenance, resource, representation, cache, and correlation envelope for cross-boundary SocioProphet/Fog Stack actions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "srga_version",
+    "resource",
+    "representation",
+    "action",
+    "actor",
+    "policy",
+    "provenance",
+    "correlation"
+  ],
+  "properties": {
+    "srga_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?(-[A-Za-z0-9.-]+)?$",
+      "description": "SRGA envelope contract version."
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Durable conceptual resource identifier. SHOULD be URI-like, DID-linked, slash-topic-backed, or content-addressed where appropriate."
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Resource class such as SlashTopic, GAIAFeature, EvidenceBundle, AgentRun, PolicyDecision, RuntimeBundle, SourceOSStateRecord, or PlatformAssetRecord."
+        },
+        "semantic_version": {
+          "type": "string",
+          "description": "Optional semantic version for the resource semantics, not necessarily the representation version."
+        },
+        "labels": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "representation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "schema_ref"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Media type or estate-specific representation type."
+        },
+        "schema_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Schema, ontology, SHACL shape, Avro schema, JSON-LD context, TriTRPC IDL, or CRD reference."
+        },
+        "version": {
+          "type": "string"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_+.-]+:[A-Za-z0-9_+./=-]+$",
+          "description": "Integrity digest such as sha256:<hex>."
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "retrieve",
+            "propose",
+            "transform",
+            "evaluate",
+            "publish",
+            "execute",
+            "revoke",
+            "repair",
+            "observe",
+            "index",
+            "route",
+            "attest",
+            "approve",
+            "deny"
+          ]
+        },
+        "intent": {
+          "type": "string"
+        },
+        "risk_class": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical", "unknown"]
+        },
+        "allowed_transitions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human, service, device, node, or agent identity. SHOULD be DID-bound where possible."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["human", "agent", "service", "device", "node", "runtime", "unknown"]
+        },
+        "capability_ref": {
+          "type": "string"
+        },
+        "authority_ref": {
+          "type": "string"
+        },
+        "delegated_by": {
+          "type": "string"
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effect"],
+      "properties": {
+        "decision_ref": {
+          "type": "string"
+        },
+        "effect": {
+          "type": "string",
+          "enum": ["allowed", "requires_approval", "redacted", "denied", "deferred", "unknown"]
+        },
+        "policy_refs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "reason": {
+          "type": "string"
+        },
+        "obligations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {
+        "source_refs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "derived_from": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "receipt_ref": {
+          "type": "string"
+        },
+        "runtime_ref": {
+          "type": "string"
+        },
+        "tool_refs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "model_refs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "cache": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": {
+          "type": "boolean"
+        },
+        "ttl": {
+          "type": "string",
+          "description": "ISO-8601 duration such as PT10M."
+        },
+        "scope": {
+          "type": "string",
+          "enum": ["private", "shared", "public", "none", "unknown"]
+        },
+        "revalidate_on": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["revocation", "policy_change", "source_update", "schema_update", "representation_update", "manual_review", "expiry"]
+          },
+          "uniqueItems": true
+        },
+        "authority_ref": {
+          "type": "string"
+        }
+      }
+    },
+    "validity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "not_before": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "not_after": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "uncertainty": {
+          "type": ["number", "string", "object", "null"]
+        },
+        "quality": {
+          "type": ["number", "string", "object", "null"]
+        }
+      }
+    },
+    "correlation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id"],
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trace_id": {
+          "type": "string"
+        },
+        "parent_id": {
+          "type": ["string", "null"]
+        },
+        "span_id": {
+          "type": "string"
+        }
+      }
+    },
+    "membrane": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "boundary_ref": {
+          "type": "string"
+        },
+        "crossing_rule_ref": {
+          "type": "string"
+        },
+        "transformation_ref": {
+          "type": "string"
+        },
+        "receipt_ref": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
