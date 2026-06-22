@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.socioprophet.ai/prophet-platform-standards/boundary.schema.json",
+  "title": "SocioProphet Typed Boundary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "repo",
+    "jurisdiction",
+    "owned_artifacts",
+    "non_goals",
+    "upstream_inputs",
+    "downstream_outputs",
+    "claim_modes",
+    "sufficiency_types",
+    "trust_roots",
+    "evidence_required",
+    "allowed_crossings",
+    "forbidden_crossings",
+    "promotion_gates",
+    "maturity"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^0\\.[0-9]+$"
+    },
+    "repo": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    },
+    "jurisdiction": {
+      "type": "string",
+      "minLength": 12
+    },
+    "owned_artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "non_goals": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 4 }
+    },
+    "upstream_inputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/crossing" }
+    },
+    "downstream_outputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/crossing" }
+    },
+    "claim_modes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/claim_mode" },
+      "uniqueItems": true
+    },
+    "sufficiency_types": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/sufficiency_type" },
+      "uniqueItems": true
+    },
+    "trust_roots": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/trust_root" }
+    },
+    "evidence_required": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidence_requirement" }
+    },
+    "allowed_crossings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/crossing" }
+    },
+    "forbidden_crossings": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 4 }
+    },
+    "promotion_gates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/promotion_gate" }
+    },
+    "maturity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "status"],
+      "properties": {
+        "level": { "type": "string", "enum": ["L0", "L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8"] },
+        "status": { "type": "string" },
+        "next_step": { "type": "string" }
+      }
+    },
+    "contacts": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "$defs": {
+    "claim_mode": {
+      "type": "string",
+      "enum": [
+        "formal_construction",
+        "illustrative_schema",
+        "fixture_validated",
+        "experimental_run",
+        "independently_reproduced",
+        "audited_run"
+      ]
+    },
+    "sufficiency_type": {
+      "type": "string",
+      "enum": [
+        "microstate_sufficient",
+        "reconstruction_sufficient",
+        "semantic_sufficient",
+        "task_sufficient",
+        "governance_sufficient",
+        "audit_sufficient",
+        "not_sufficient"
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "paths": { "type": "array", "items": { "type": "string" } },
+        "claim_modes": { "type": "array", "items": { "$ref": "#/$defs/claim_mode" } },
+        "sufficiency_types": { "type": "array", "items": { "$ref": "#/$defs/sufficiency_type" } }
+      }
+    },
+    "crossing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo", "artifact", "purpose"],
+      "properties": {
+        "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+        "artifact": { "type": "string" },
+        "purpose": { "type": "string" },
+        "required_claim_mode": { "$ref": "#/$defs/claim_mode" },
+        "required_sufficiency": { "$ref": "#/$defs/sufficiency_type" }
+      }
+    },
+    "trust_root": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "assumption"],
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["signature", "hash", "attestation", "policy_bundle", "schema", "human_review", "runtime", "other"] },
+        "assumption": { "type": "string" }
+      }
+    },
+    "evidence_requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_mode", "required_artifacts"],
+      "properties": {
+        "claim_mode": { "$ref": "#/$defs/claim_mode" },
+        "required_artifacts": { "type": "array", "items": { "type": "string" } },
+        "checker": { "type": "string" },
+        "downgrade_if_missing": { "type": "string", "enum": ["INCONCLUSIVE", "VIOLATION", "not_applicable"] }
+      }
+    },
+    "promotion_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "evidence"],
+      "properties": {
+        "from": { "$ref": "#/$defs/claim_mode" },
+        "to": { "$ref": "#/$defs/claim_mode" },
+        "evidence": { "type": "array", "items": { "type": "string" } },
+        "policy": { "type": "string" }
+      }
+    }
+  }
+}
