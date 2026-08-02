@@ -86,6 +86,8 @@ All repo states verified via `gh` on 2026-08-02.
 | **D-F** | Build-vs-buy | NetBox (Apache-2.0 ✓), Spark/Beam/Drill/Iceberg (Apache-2.0 ✓) all license-clean but **wrap, don't merge** (generalise the OpenConnector decision). HyperSwarm mesh + federated plane = new repos. | img6, img13 WOs |
 | **D-G** | MeshRush fold-in | DECIDED (this session): fold the Omni-Crystal scientific engine into the existing `meshrush` repo, filling its acknowledged stub slots; run it on `sp-orchestrator`; extend governance to `agent-machine` + `prophet-mesh` via the conductor. | MR-WO-00.. |
 | **D-H** | nauty/Traces license | nauty/Traces is Apache-2.0 since 2.6 (MIT/Apache-only constraint OK) — **verify the exact version** before wiring the symmetry cascade. | MR-WO-04 |
+| **D-I** | Modal fact-class axis | `SIMULATED`/`COUNTERFACTUAL` (Pearl's ladder: observational→interventional→counterfactual) are an axis **orthogonal** to `epistemicLevel`, not new rungs on it. Cell schema carries both. | ECO-1 |
+| **D-J** | SCOPE-D concern separation | SCOPE-D "is the security purple-team + enrichment loop." One mechanism (the substrate loop), separated concern: SCOPE-D = the adversarial *instantiation* (hostile `z`, red+blue) with **isolated observation lane, amendment-only gate** (residual→Layer-2 manifest narrowing, never inline auto-actuation), campaign cadence, retained findings corpus, sandboxed containment. Do **not** fork the loop per concern. | A2-11, guardrail-fabric |
 
 ---
 
@@ -106,7 +108,7 @@ Legend: ✅ done · 🔨 build · 🔀 subsumed/re-scope · ⛔ blocked on decis
 | A2-2 | BMG-1 invariant + Layer-1/Layer-2 gate | `agent-registry` | **first**; unblocks all actuation |
 | A2-3 | Ontogenesis gated stage ladder + demotion | `ontogenesis` | 🔀 see A3 (fibration re-scopes) |
 | A2-4 | Six-edge interaction ontology | `hellgraph` | 🔀 subsumed by A3-WO-12 |
-| A2-5 | MissionScore six-axis emission | `tritfabric` | ⛔ D-A? no; verify tritfabric (D-2 reconcile) |
+| A2-5 | MissionScore six-axis emission | `tritfabric` | ⛔ resolve tritfabric live/dead first (§2 reconcile) |
 | A2-6 | Deferred defuzzification (or symbolic policy) | `tritfabric` | prefer symbolic-policy (batch-2 img8) |
 | A2-7 | ControlParameter registry + envelopes | `exodus` | — |
 | A2-8 | AgentLoadRecord + ACWR drift | `agentplane` | ACWR bands = priors, recalibrate |
@@ -154,7 +156,7 @@ Legend: ✅ done · 🔨 build · 🔀 subsumed/re-scope · ⛔ blocked on decis
 | MR-07 | experiment matrix (structural/dynamical/observation-first; encode 129-vs-141 correction) | `meshrush` | MR-06 |
 | MR-08 | governance seam: meshrush loop as sp-orchestrator DAG + ExpansionPoints; govern `agent-machine` receipts + `prophet-mesh` choir; conductor manifest | `meshrush` + `agent-machine` + `prophet-mesh` | MR-06, ORCH-06 |
 
-### 4.5b Ecosystem Simulation Substrate — the market-intelligence cartridge (6th loop instantiation)
+### 4.5 Ecosystem Simulation Substrate — the market-intelligence cartridge (6th loop instantiation)
 Intake 2026-08-02. Two WOs: v1 "Ecosystem Reporting Substrate" (descriptive fact store) **superseded by** v2 "Ecosystem Simulation Substrate" (causal, interventional). This is the **Investor-Insights / market-view cartridge**; homes = `economic-prophet` + `regis-entity-graph` + `hellgraph`. It is the same canonical loop at the causal layer:
 - **identifiability gate** (refuse point estimate for unidentified estimand → bounds + blocking structure) = the `epistemicLevel` refusal / `meet_all([])=Speculative` rule for causal inference.
 - **two-layer SCM(governance)/solver(execution)** — "Layer B never runs on an estimand Layer A has not cleared" = **BMG-1** (Layer2 "may we claim this" / Layer1 "what is the value").
@@ -172,7 +174,7 @@ Intake 2026-08-02. Two WOs: v1 "Ecosystem Reporting Substrate" (descriptive fact
 | ECO-7 | Multi-tenant contamination control (k-anon + **differencing-attack budget**, output-side screening) | `policy-fabric`/`semantic-serdes` | ⛔ legal; 🔀 shares A3-18 k-anon |
 | ECO-8 | Filing cadence + renderers (benchmark + market-view, recommendation gate, audience-scoped license enforcement) | `economic-prophet` | ECO-4 |
 
-### 4.5 Genuinely net-new (D-F)
+### 4.6 Genuinely net-new (D-F)
 | WO | Title | Home | Note |
 |---|---|---|---|
 | NEW-1 | HyperSwarm mesh: node discovery / gossip / rendezvous / placement | new repo | from img12 sovereign cloud-shell |
